@@ -57,6 +57,7 @@ class Sample:
 def Moran_process(sample:Sample, n:int, possible_relative_error:float = 0.01):
     proportions = [sample.get_proportions()]
     growth_rate_by_type = [sample.get_mean_growth_rate_by_type()]
+    growth_rates = [sample.get_mean_growth_rate()]
     for i in range(n):
         birth_rate = np.random.uniform(0, sample.get_cumulative_growth_rate())
         birth_index = np.searchsorted(sample.cumulative_growth_rates, birth_rate)
@@ -65,28 +66,32 @@ def Moran_process(sample:Sample, n:int, possible_relative_error:float = 0.01):
         sample.update(birth_index, new_growth_rate,death_index)
         proportions.append(sample.get_proportions())
         growth_rate_by_type.append(sample.get_mean_growth_rate_by_type())
-    return proportions, growth_rate_by_type
+        growth_rates.append(sample.get_mean_growth_rate())
+    return proportions, growth_rate_by_type, growth_rates
 
 
 
 
-def main(growth_rates, numbers, N = 20000, error = 0.03):
+def main(growth_rates, numbers, N = 10000, error = 0.03):
     assert len(growth_rates) == len(numbers)
     cells = []
     for i in range(len(growth_rates)):
         for j in range(numbers[i]):
             cells.append(Cell(growth_rates[i], i,))
     sample = Sample(cells, len(growth_rates))
-    proportions, growth_rate_by_type = Moran_process(sample, N, error)
-    proportion_evolution_per_type = np.array(proportions).T
+    proportions, growth_rate_by_type, mean_growth_rates  = Moran_process(sample, N, error)
     growth_rate_evolution_per_type = np.array(growth_rate_by_type).T
+    growth_rate_evolution_per_type = growth_rate_evolution_per_type- np.array(mean_growth_rates)
     plt.figure()
-    plt.plot(proportion_evolution_per_type.T)
+    plt.plot(proportions)
     plt.show()
     plt.figure()
     plt.plot(growth_rate_evolution_per_type.T)
     plt.show()
+    plt.figure()
+    plt.plot(mean_growth_rates)
+    plt.show()
 
-growth_rate= [2.2,1.9,2.1,2.]
-numbers = [100,100,100,100]
+growth_rate= [2.2,1.9,2.1,2.5]
+numbers = [200,200,200,10]
 main(growth_rate, numbers)
