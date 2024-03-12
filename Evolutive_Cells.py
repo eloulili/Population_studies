@@ -1,5 +1,6 @@
 from typing import Optional
 import numpy as np
+import matplotlib.scale as scle
 import matplotlib.pyplot as plt
 
 
@@ -77,6 +78,10 @@ class EvolutiveSample:
                 best_adaptation = min(cell.short_evolutions, key=lambda x:abs(x[0]-conditions))
                 best_distance = min(best_distance, abs(best_adaptation[0]-conditions))
             cell.growth_rate = growth_rate(best_distance, cell.long_evolution)
+        cumul = 0.
+        for i in range(self.n):
+            cumul += self.cells[i].growth_rate
+            self.cumulative_growth_rates[i]
 
     def get_proportions_per_type(self):
         return [sum([cell.type == i for cell in self.cells])/self.n for i in range(self.nb_types)]
@@ -139,6 +144,11 @@ def Moran_process(sample:EvolutiveSample,conditions_profile:list[tuple[int, int]
     return proportions_evolution, proportions_type, growth_rate_by_type, growth_rates
 
 
+N = 200
+def scale(x):
+    return x/N
+
+SCALE = scle.FuncScale(scale)
 
 
 def main(first_evolution, numbers, conditions_profile:list[tuple[int, int]], probabilities: Optional[list[float]] = None):
@@ -160,16 +170,16 @@ def main(first_evolution, numbers, conditions_profile:list[tuple[int, int]], pro
     growth_rate_evolution_per_type = growth_rate_evolution_per_type- np.array(mean_growth_rates)
     plt.figure()
     plt.plot(proportion_evolution, label = [f"Type {i}" for i in range(10)])
+    plt.xscale("linear",SCALE)
     plt.xlabel("Time")
     plt.ylabel("Proportion of cells")
     plt.title("Proportion of cells per evolution")
-    plt.show()
-    plt.figure()
-    plt.plot(mean_growth_rates)
+    plt.legend()
     plt.show()
 
-probabilities = [0.2, 0.05, 1.1]
+
+probabilities = [0.1, 0.01, 1.1]
 first_evolution = [0]
-numbers = [300]
-conditions_profile = [(2, 6000), (5, 300), (3, 200), (6, 100), (7, 1000), (5, 300), (9, 6000)]
+numbers = [N]
+conditions_profile = [(2, 6000), (5, 3000), (3, 2000), (6, 1000), (7, 10000), (5, 3000), (9, 6000), (5, 10000), (3, 10000), (1, 10000)]
 main(first_evolution, numbers, conditions_profile,probabilities)
