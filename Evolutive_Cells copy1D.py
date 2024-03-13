@@ -16,7 +16,7 @@ def growth_rate(best_gene_distance, evolutions, condition):
     return 1/(1+0.1*best_gene_distance) + inherent_growth_rates[max(evolutions, condition)] 
     # the first term is the adaptation, the second term is the inherent growth rate that can be capted by the cell 
 
-class EvolutiveCells:
+class EvolutiveCells1D:
     def __init__(self, type:int, first_evolution: Optional[int] = None, conditions = 0):
 
         self.type = type
@@ -54,7 +54,7 @@ class EvolutiveCells:
                     self.short_evolutions.append([np.random.randint(conditions,self.long_evolution+1), 5])
     
     def copy(self, conditions):
-        new_cell = EvolutiveCells(self.type,conditions)
+        new_cell = EvolutiveCells1D(self.type,conditions)
         new_cell.short_evolutions = self.short_evolutions.copy()
         new_cell.long_evolution = self.long_evolution
         return new_cell
@@ -65,9 +65,9 @@ class EvolutiveCells:
 
     
 
-class EvolutiveSample:
+class EvolutiveSample1D:
 
-    def __init__(self, cells:list[EvolutiveCells], nb_types:int):
+    def __init__(self, cells:list[EvolutiveCells1D], nb_types:int):
         self.cells = cells
         self.n = len(cells)
         self.nb_types = nb_types
@@ -134,7 +134,7 @@ class EvolutiveSample:
         return string
 
 
-def Moran_process(sample:EvolutiveSample,conditions_profile:list[tuple[int, int]], evolution_probabilty: float = 0.01, adaptation_probability: float = 0.01, distance_mult:float = 1.1):
+def Moran_process(sample:EvolutiveSample1D,conditions_profile:list[tuple[int, int]], evolution_probabilty: float = 0.01, adaptation_probability: float = 0.01, distance_mult:float = 1.1):
     proportions_type = [sample.get_proportions_per_type()]
     proportions_evolution = [sample.get_proportions_per_evolution()]
     proportion_adaptation = [sample.get_proportion_per_adaptation()]
@@ -165,8 +165,8 @@ def main(first_evolution, numbers, conditions_profile:list[tuple[int, int]], pro
         initial_conditions = conditions_profile[0][0]
         for i in range(len(first_evolution)):
             for j in range(numbers[i]):
-                cells.append(EvolutiveCells(i, first_evolution[i], initial_conditions))
-        sample = EvolutiveSample(cells, len(first_evolution),)
+                cells.append(EvolutiveCells1D(i, first_evolution[i], initial_conditions))
+        sample = EvolutiveSample1D(cells, len(first_evolution),)
 
         if probabilities !=None:
             proportion_evolution, proportion_adaptation, proportions_type, growth_rate_by_type, mean_growth_rates  = Moran_process(sample, conditions_profile, probabilities[0], probabilities[1], probabilities[2])
