@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.scale as scle
 import matplotlib.pyplot as plt
 
-
+np.random.seed(0)
 N = 200
 MAX_CONDITIONS = 9
 probabilities = [0.05, 0.01, 1.1]
@@ -112,6 +112,9 @@ class EvolutiveSample:
     def get_proportions_per_evolution(self):
         return [sum([cell.long_evolution == i for cell in self.cells])/self.n for i in range(MAX_CONDITIONS+1)]
     
+    def get_proportion_per_adaptation(self):
+        return [sum([evolution[0] == i for cell in self.cells for evolution in cell.short_evolutions])/self.n for i in range(MAX_CONDITIONS+1)]
+    
     def get_propotions_per_evolution_and_type(self, type:int):
         assert type < self.nb_types
         return [sum([cell.long_evolution == i and cell.type == type for cell in self.cells])/self.n for i in range(MAX_CONDITIONS)]
@@ -134,6 +137,7 @@ class EvolutiveSample:
 def Moran_process(sample:EvolutiveSample,conditions_profile:list[tuple[int, int]], evolution_probabilty: float = 0.01, adaptation_probability: float = 0.01, distance_mult:float = 1.1):
     proportions_type = [sample.get_proportions_per_type()]
     proportions_evolution = [sample.get_proportions_per_evolution()]
+    proportion_adaptation = [sample.get_proportion_per_adaptation()]
     growth_rate_by_type = [sample.get_mean_growth_rate_by_type()]
     growth_rates = [sample.get_mean_growth_rate()]
     for conditions, n in conditions_profile:
@@ -148,16 +152,15 @@ def Moran_process(sample:EvolutiveSample,conditions_profile:list[tuple[int, int]
             proportions_evolution.append(sample.get_proportions_per_evolution())
             growth_rate_by_type.append(sample.get_mean_growth_rate_by_type())
             growth_rates.append(sample.get_mean_growth_rate())
+            proportion_adaptation.append(sample.get_proportion_per_adaptation())
 
-    return proportions_evolution, proportions_type, growth_rate_by_type, growth_rates
+    return proportions_evolution, proportion_adaptation, proportions_type, growth_rate_by_type, growth_rates
 
 
 
 def main(first_evolution, numbers, conditions_profile:list[tuple[int, int]], probabilities: Optional[list[float]] = None):
-    growth_rates = []
-    proportion_evolutions = []
     assert len(first_evolution) == len(numbers)
-    for i in range(10):
+    for k in range(1):
         cells = []
         initial_conditions = conditions_profile[0][0]
         for i in range(len(first_evolution)):
@@ -166,25 +169,34 @@ def main(first_evolution, numbers, conditions_profile:list[tuple[int, int]], pro
         sample = EvolutiveSample(cells, len(first_evolution),)
 
         if probabilities !=None:
-            proportion_evolution, proportions_type, growth_rate_by_type, mean_growth_rates  = Moran_process(sample, conditions_profile, probabilities[0], probabilities[1], probabilities[2])
+            proportion_evolution, proportion_adaptation, proportions_type, growth_rate_by_type, mean_growth_rates  = Moran_process(sample, conditions_profile, probabilities[0], probabilities[1], probabilities[2])
         else:
             proportions_type, proportion_evolution, growth_rate_by_type, mean_growth_rates  = Moran_process(sample, conditions_profile)
-        proportion_evolutions.append(proportion_evolution)
-        growth_rates.append(mean_growth_rates)
-    for j in range(10):
         plt.figure()
-        plt.plot(proportion_evolutions[j], label = [f"Type {i}" for i in range(10)])
+        plt.plot(proportion_evolution, label = [f"evolution {i}" for i in range(10)])
         plt.xlabel("Time")
         plt.ylabel("Proportion of cells")
         plt.title("Proportion of cells per evolution")
         plt.legend()
-        plt.show()
         plt.figure()
-        plt.plot(growth_rates[j])
+        plt.plot(proportion_adaptation, label = [f"evolution {i}" for i in range(10)])
+        plt.xlabel("Time")
+        plt.ylabel("Proportion of cells")
+        plt.title("Proportion of cells per adaptation")
+        plt.legend()
+        plt.figure()
+        plt.plot(mean_growth_rates)
         plt.xlabel("Time")
         plt.ylabel("Mean growth rate")
         plt.title("Mean growth rate")
+        plt.figure()
+        plt.plot(proportions_type, label = [f"Type {i}" for i in range(10)])
+        plt.xlabel("Time")
+        plt.ylabel("Proportion of cells")
+        plt.title("Proportion of cells per type")
+        plt.legend()
         plt.show()
+
 
 
 
