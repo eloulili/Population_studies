@@ -4,8 +4,17 @@ import matplotlib.scale as scle
 import matplotlib.pyplot as plt
 
 
-def growth_rate(best_gene_distance, evolutions):
-    return 1/(1+0.1*best_gene_distance)
+N = 200
+MAX_CONDITIONS = 9
+probabilities = [0.05, 0.01, 1.1]
+first_evolution = [i for i in range(10)]
+numbers = [20 for i in range(10)]
+conditions_profile = [(9, 500),(8,500),(7,500),(6,500),(5,500),(4,500),(3,500),(2,500),(1,500),(0,500),(9, 500),(8,500),(7,500),(6,500),(5,500),(4,500),(3,500),(2,500),(1,500),(0,500),(9, 500),(8,500),(7,500),(6,500),(5,500),(4,500),(3,500),(2,500),(1,500),(0,500),(9, 500),(8,500),(7,500),(6,500),(5,500),(4,500),(3,500),(2,500),(1,500),(0,500) ]
+inherent_growth_rates = [0.5 /(1.1**i) for i in range(MAX_CONDITIONS+1)] # assume that condition 0 is the best and condition 9 is the worst
+
+def growth_rate(best_gene_distance, evolutions, condition):
+    return 1/(1+0.1*best_gene_distance) + inherent_growth_rates[max(evolutions, condition)] 
+    # the first term is the adaptation, the second term is the inherent growth rate that can be capted by the cell 
 
 class EvolutiveCells:
     def __init__(self, type:int, first_evolution: Optional[int] = None, conditions = 0):
@@ -13,7 +22,7 @@ class EvolutiveCells:
         self.type = type
         self.short_evolutions = [] # the first element is the adaptation, the second is the duration
         self.long_evolution = first_evolution
-        self.growth_rate = growth_rate(abs(first_evolution - conditions), self.long_evolution)
+        self.growth_rate = growth_rate(abs(first_evolution - conditions), self.long_evolution, conditions)
 
     def get_growth_rate(self):
         return self.growth_rate
@@ -23,11 +32,11 @@ class EvolutiveCells:
     
 
     def update_cell(self, conditions, probability_to_evolve: float = 0.1, distance_mult:float = 1.1 ,probability_to_adapt: float = 0.1):
-        best_distance, algebric_distance = abs(self.long_evolution-conditions), self.long_evolution-conditions
+        best_distance = abs(self.long_evolution-conditions)
         if self.short_evolutions != []:
             best_adaptation = min(self.short_evolutions, key=lambda x:abs(x[0]-conditions))
             best_distance = min(best_distance, abs(best_adaptation[0]-conditions))
-        self.growth_rate = growth_rate(best_distance, self.short_evolutions)
+        self.growth_rate = growth_rate(best_distance, self.long_evolution, conditions)
         for evolution in self.short_evolutions:
             if evolution[1] == 0:
                 self.short_evolutions.remove(evolution)
@@ -57,7 +66,6 @@ class EvolutiveCells:
     
 
 class EvolutiveSample:
-    MAX_CONDITIONS = 9
 
     def __init__(self, cells:list[EvolutiveCells], nb_types:int):
         self.cells = cells
@@ -77,7 +85,7 @@ class EvolutiveSample:
             if cell.short_evolutions != []:
                 best_adaptation = min(cell.short_evolutions, key=lambda x:abs(x[0]-conditions))
                 best_distance = min(best_distance, abs(best_adaptation[0]-conditions))
-            cell.growth_rate = growth_rate(best_distance, cell.long_evolution)
+            cell.growth_rate = growth_rate(best_distance, cell.long_evolution, conditions)
         cumul = 0.
         for i in range(self.n):
             cumul += self.cells[i].growth_rate
@@ -102,11 +110,11 @@ class EvolutiveSample:
         return self.cumulative_growth_rates[-1]
     
     def get_proportions_per_evolution(self):
-        return [sum([cell.long_evolution == i for cell in self.cells])/self.n for i in range(self.MAX_CONDITIONS+1)]
+        return [sum([cell.long_evolution == i for cell in self.cells])/self.n for i in range(MAX_CONDITIONS+1)]
     
     def get_propotions_per_evolution_and_type(self, type:int):
         assert type < self.nb_types
-        return [sum([cell.long_evolution == i and cell.type == type for cell in self.cells])/self.n for i in range(self.MAX_CONDITIONS)]
+        return [sum([cell.long_evolution == i and cell.type == type for cell in self.cells])/self.n for i in range(MAX_CONDITIONS)]
 
     def update(self, birth_index, death_index, evolution_probabilty: float = 0.01, adaptation_probability: float = 0.01, distance_mult:float = 1.1):
         new_cell = self.cells[birth_index].copy(self.conditions)
@@ -144,42 +152,40 @@ def Moran_process(sample:EvolutiveSample,conditions_profile:list[tuple[int, int]
     return proportions_evolution, proportions_type, growth_rate_by_type, growth_rates
 
 
-N = 200
-def scale(x):
-    return x/N
-
-SCALE = scle.FuncScale(scale)
-
 
 def main(first_evolution, numbers, conditions_profile:list[tuple[int, int]], probabilities: Optional[list[float]] = None):
+    growth_rates = []
+    proportion_evolutions = []
     assert len(first_evolution) == len(numbers)
-    cells = []
-    initial_conditions = conditions_profile[0][0]
-    for i in range(len(first_evolution)):
-        for j in range(numbers[i]):
-            cells.append(EvolutiveCells(i, first_evolution[i], initial_conditions))
-    sample = EvolutiveSample(cells, len(first_evolution),)
-    print(str(sample))
+    for i in range(10):
+        cells = []
+        initial_conditions = conditions_profile[0][0]
+        for i in range(len(first_evolution)):
+            for j in range(numbers[i]):
+                cells.append(EvolutiveCells(i, first_evolution[i], initial_conditions))
+        sample = EvolutiveSample(cells, len(first_evolution),)
 
-    if probabilities !=None:
-        proportion_evolution, proportions_type, growth_rate_by_type, mean_growth_rates  = Moran_process(sample, conditions_profile, probabilities[0], probabilities[1], probabilities[2])
-    else:
-        proportions_type, proportion_evolution, growth_rate_by_type, mean_growth_rates  = Moran_process(sample, conditions_profile)
-    print(str(sample))
-    growth_rate_evolution_per_type = np.array(growth_rate_by_type).T
-    growth_rate_evolution_per_type = growth_rate_evolution_per_type- np.array(mean_growth_rates)
-    plt.figure()
-    plt.plot(proportion_evolution, label = [f"Type {i}" for i in range(10)])
-    plt.xscale("linear",SCALE)
-    plt.xlabel("Time")
-    plt.ylabel("Proportion of cells")
-    plt.title("Proportion of cells per evolution")
-    plt.legend()
-    plt.show()
+        if probabilities !=None:
+            proportion_evolution, proportions_type, growth_rate_by_type, mean_growth_rates  = Moran_process(sample, conditions_profile, probabilities[0], probabilities[1], probabilities[2])
+        else:
+            proportions_type, proportion_evolution, growth_rate_by_type, mean_growth_rates  = Moran_process(sample, conditions_profile)
+        proportion_evolutions.append(proportion_evolution)
+        growth_rates.append(mean_growth_rates)
+    for j in range(10):
+        plt.figure()
+        plt.plot(proportion_evolutions[j], label = [f"Type {i}" for i in range(10)])
+        plt.xlabel("Time")
+        plt.ylabel("Proportion of cells")
+        plt.title("Proportion of cells per evolution")
+        plt.legend()
+        plt.show()
+        plt.figure()
+        plt.plot(growth_rates[j])
+        plt.xlabel("Time")
+        plt.ylabel("Mean growth rate")
+        plt.title("Mean growth rate")
+        plt.show()
 
 
-probabilities = [0.1, 0.01, 1.1]
-first_evolution = [0]
-numbers = [N]
-conditions_profile = [(2, 6000), (5, 3000), (3, 2000), (6, 1000), (7, 10000), (5, 3000), (9, 6000), (5, 10000), (3, 10000), (1, 10000)]
+
 main(first_evolution, numbers, conditions_profile,probabilities)
