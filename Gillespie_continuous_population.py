@@ -3,8 +3,9 @@ import numpy as np
 import time
 import matplotlib.pyplot as plt
 
-DISTANT_COEFF = 130
+DISTANT_COEFF = 250
 
+np.random.seed(0)
 
 def growth_rate(genes, adaptation, condition):
     if adaptation is None:
@@ -13,15 +14,15 @@ def growth_rate(genes, adaptation, condition):
 
 
 class EvolutiveCells1D:
-    def __init__(self, type:int, first_evolution: Optional[int] = None, conditions = 0):
+    def __init__(self,  first_evolution: Optional[int] = None, conditions = 0):
 
-        self.type = type
         self.short_evolution = None # the first element is the adaptation, the second is the duration
         self.long_evolution = first_evolution
         self.growth_rate = growth_rate(first_evolution,None ,conditions)
         self.generation = 0
 
-    def update_cell(self, conditions, probability_to_evolve: float = 0.1, distance_mult:float = 1.1 ,probability_to_adapt: float = 0.1)->tuple[int,int]:
+    def update_cell(self, conditions, probability_to_evolve: float = 0.1, 
+                    distance_mult:float = 1.1 ,probability_to_adapt: float = 0.1)->tuple[int,int]:
         best_distance = abs(self.long_evolution-conditions)
         new_evolution = -1
         new_adaptation = -1
@@ -59,7 +60,15 @@ class EvolutiveCells1D:
 
 
 
-def gillespie_algorithm(initial_evolutions, total_time, condition_profile, n_plot=5, evolutions_probability=0.1, adaptation_probability=0.1, evol_probability_without_adaptation=0.1, probability_to_loose_adaptation=1/5, death_rate=0.5):
+def gillespie_algorithm(initial_evolutions, 
+                        total_time, 
+                        condition_profile, 
+                        n_plot=5, 
+                        evolutions_probability=0.1, 
+                        adaptation_probability=0.1, 
+                        evol_probability_without_adaptation=0.1,
+                        probability_to_loose_adaptation=1/5, 
+                        death_rate=0.5):
     populations = np.array([len(initial_evolutions)])
     n_evol, n_adapt, n_evol_wa = 0, 0, 0
     n_events, n_death, n_born = 0 , 0, 0
@@ -69,7 +78,7 @@ def gillespie_algorithm(initial_evolutions, total_time, condition_profile, n_plo
     time_between_plot = total_time/n_plot
     time_next_plot = time_between_plot
     current_evolutions = np.array(initial_evolutions)
-    num_bins = 30
+    num_bins = 60
     genetic_richness = np.array([100*len(set(current_evolutions))/len(current_evolutions)])
     plt.hist(current_evolutions, bins=num_bins, density=True, edgecolor='black')
     plt.xlabel('Valeurs')
@@ -88,15 +97,24 @@ def gillespie_algorithm(initial_evolutions, total_time, condition_profile, n_plo
             current_rates = np.array([growth_rate(cell.long_evolution, cell.short_evolution, condition) for cell in cell_batch])
             current_rates = np.insert(current_rates, 0, death_rate * len(cell_batch))
 
-        total_rate = np.sum(current_rates)
+        
         if len(cell_batch) == 0:
             print("extinction")
             break
 
-        if len(cell_batch) > 15000:
+        if len(cell_batch) > 13000:
             print("overpopulation")
+            generations = [cell.generation for cell in cell_batch]
+            print(f"N_evolution : {n_evol}, N_adaptation : {n_adapt}, N_death : {n_death}, N_born : {n_born}, N_events : {n_events}, N_evol_without_adaptation : {n_evol_wa}")
+            print(f"Mean generation : {np.mean(generations)}, Max generation : {max(generations)}, Min generation : {min(generations)}, Median generation : {np.median(generations)} , Std generation : {np.std(generations)}")
+            plt.hist(current_evolutions, bins=num_bins, density=True, edgecolor='black')
+            plt.xlabel('Valeurs')
+            plt.ylabel('Densité de probabilité')
+            plt.title('Distribution des valeurs au temps ' + str(time) + 's' + "  population : " + str(len(cell_batch)))
+            plt.grid(True)
+            plt.show()
             break
-
+        total_rate = np.sum(current_rates)
         dt = np.random.exponential(1 / total_rate)
         time += dt
 
@@ -125,7 +143,6 @@ def gillespie_algorithm(initial_evolutions, total_time, condition_profile, n_plo
 
             if change_probabilities[0] < evol_probability_without_adaptation:
                 new_evolution = np.random.normal(new_cell.long_evolution, 0.05)
-                current_evolutions = np.append(current_evolutions, new_evolution)
                 n_evol += 1
                 n_evol_wa += 1
 
@@ -138,6 +155,7 @@ def gillespie_algorithm(initial_evolutions, total_time, condition_profile, n_plo
 
             if change_probabilities[3] < evolutions_probability and new_cell.short_evolution is not None:
                 new_evolution = np.random.normal(new_cell.short_evolution, 0.05)
+                new_cell.long_evolution = new_evolution
                 current_evolutions = np.append(current_evolutions, new_evolution)
                 n_evol += 1
 
@@ -168,7 +186,7 @@ for i in range(15):
     for times, condition in basic_condition_profile:
         condition_profile.append((times + i*40, condition))
 
-condition_profile = [(8, 1.1), (16, 1.3), (24, 1.05), (32,1.35), (40,1.2)]
+condition_profile = [(15,1.15), (90,1.3), (110,1.2)]
 
 population = 6000
 adaptation_probability = 0.1
@@ -177,11 +195,10 @@ evolution_without_adaptation_probability = 5e-4
 mean_time_to_loose_adaptation = 5
 probability_to_loose_adaptation = 1/mean_time_to_loose_adaptation
 initial_evolutions = np.random.normal(0,0.2, population)
-death_rate = 0.45
-total_time = 120
-np.random.seed(0)
+death_rate = 0.52
+total_time = 300
 start = time.time()
-timesteps,  populations, current_evolutions, rate_evolution, genetic_richness = gillespie_algorithm( initial_evolutions,  total_time, condition_profile, evolutions_probability = evolution_probability, adaptation_probability = adaptation_probability, evol_probability_without_adaptation = evolution_without_adaptation_probability, probability_to_loose_adaptation = probability_to_loose_adaptation, death_rate=death_rate, n_plot=1)
+timesteps,  populations, current_evolutions, rate_evolution, genetic_richness = gillespie_algorithm( initial_evolutions,  total_time, condition_profile, evolutions_probability = evolution_probability, adaptation_probability = adaptation_probability, evol_probability_without_adaptation = evolution_without_adaptation_probability, probability_to_loose_adaptation = probability_to_loose_adaptation, death_rate=death_rate, n_plot=2)
 stop = time.time()
 
 timesteps_10s = [timesteps[i] for i in range(len(timesteps)) if timesteps[i] > 10]
@@ -207,7 +224,6 @@ plt.figure()
 plt.plot(timesteps_10s, richness_10s)
 plt.xlabel('Time')
 plt.ylabel('Genetic richness')
-
 
 
 plt.show()
