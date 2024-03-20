@@ -3,8 +3,8 @@ import numpy as np
 import time
 import matplotlib.pyplot as plt
 
-DISTANT_COEFF = 5
-RANGE_COEFF = 1.5
+DISTANT_COEFF = 4.5
+RANGE_COEFF = 1.8
 
 np.random.seed(0)
 
@@ -55,7 +55,9 @@ class EvolutiveCells1D:
         self.phenotype = None # the first element is the adaptation, the second is the duration
         self.genotype = first_evolution
         self.growth_rate = growth_rate(first_evolution,None ,conditions)
-        self.generation = 0
+        self.absolute_generation = 0
+        self.generation_on_same_evolution = 0
+        self.evolution_generation = 0
 
     
     
@@ -63,7 +65,9 @@ class EvolutiveCells1D:
         new_cell = EvolutiveCells1D(self.genotype, conditions)
         new_cell.phenotype = self.phenotype
         new_cell.genotype = self.genotype
-        new_cell.generation = self.generation + 1
+        new_cell.absolute_generation = self.absolute_generation + 1
+        new_cell.evolution_generation = self.evolution_generation 
+        new_cell.generation_on_same_evolution = self.generation_on_same_evolution + 1
         return new_cell
 
 
@@ -93,6 +97,15 @@ def gillespie_algorithm(initial_evolutions,
     current_rates = np.insert(current_rates, 0, death_rate * len(cell_batch))
     rate_evolution = [ np.mean(current_rates[1:])]
     mean_range = [np.mean([genotype[1] - genotype[0] for genotype in current_evolutions])]
+
+    absolute_generations = [cell.absolute_generation for cell in cell_batch]
+    evolution_gererations = [cell.evolution_generation for cell in cell_batch]
+    generations_on_same_evolution = [cell.generation_on_same_evolution for cell in cell_batch]
+
+    mean_generation = [np.mean(absolute_generations)]
+    mean_evolution_generation = [np.mean(evolution_gererations)]
+    mean_generation_on_same_evolution = [np.mean(generations_on_same_evolution)]
+
     
     while time < total_time:
         if time > change_time and condition_profile:
@@ -106,10 +119,26 @@ def gillespie_algorithm(initial_evolutions,
             break
 
         if len(cell_batch) > 13000:
-            print("overpopulation")
-            generations = [cell.generation for cell in cell_batch]
-            print(f"N_evolution : {n_evol}, N_adaptation : {n_adapt}, N_death : {n_death}, N_born : {n_born}, N_events : {n_events}, N_evol_without_adaptation : {n_evol_wa}")
-           # print(f"Mean generation : {np.mean(generations)}, Max generation : {max(generations)}, Min generation : {min(generations)}, Median generation : {np.median(generations)} , Std generation : {np.std(generations)}")
+            print(f"N_evolution : {n_evol}, N_adaptation : {n_adapt}, N_death : {n_death}, N_born : {n_born}, N_events : {n_events}, N_evol_without_adaptation : {n_evol_wa}\n")
+
+            print(f"Mean generation : {np.mean(absolute_generations)},"  
+                   + f"Max generation : {max(absolute_generations)},"
+                   + f"Min generation : {min(absolute_generations)}," 
+                   + f"Median generation : {np.median(absolute_generations)} ,"
+                   + f"Std generation : {np.std(absolute_generations)} \n")
+            
+            print(f"Mean evolution generation : {np.mean(evolution_gererations)},"
+                  + f"Max evolution generation : {max(evolution_gererations)},"
+                  + f"Min evolution generation : {min(evolution_gererations)},"
+                  +  f"Median evolution generation : {np.median(evolution_gererations)} ,"
+                  + f"Std evolution generation : {np.std(evolution_gererations)} \n")
+            
+            print(f"Mean generation on same evolution : {np.mean(generations_on_same_evolution)},"
+                    + f"Max generation on same evolution : {max(generations_on_same_evolution)},"
+                    +  f"Median generation on same evolution : {np.median(generations_on_same_evolution)} ,"
+                    + f"Std generation on same evolution : {np.std(generations_on_same_evolution)} \n")
+            
+            
             print_hist(current_evolutions)
             break
         total_rate = np.sum(current_rates)
@@ -128,6 +157,9 @@ def gillespie_algorithm(initial_evolutions,
             current_rates = np.delete(current_rates, dead_cell+1)
             current_rates[0] -= death_rate
             current_evolutions.pop(dead_cell)
+            absolute_generations.pop(dead_cell)
+            evolution_gererations.pop(dead_cell)
+            generations_on_same_evolution.pop(dead_cell)
             n_death += 1
             populations = np.append(populations, len(cell_batch))
         else:
@@ -141,6 +173,8 @@ def gillespie_algorithm(initial_evolutions,
 
             if change_probabilities[0] < evol_probability_without_adaptation:
                 new_cell.genotype = np.random.normal(new_cell.genotype[0], 0.05), np.random.normal(new_cell.genotype[1], 0.05)
+                new_cell.evolution_generation += 1
+                new_cell.generation_on_same_evolution = 0
                 n_evol += 1
                 n_evol_wa += 1
 
@@ -157,30 +191,58 @@ def gillespie_algorithm(initial_evolutions,
                     new_cell.genotype = mini, maxi
                 else:
                     new_cell.genotype = maxi, mini
+                new_cell.evolution_generation += 1
+                new_cell.generation_on_same_evolution = 0
                 n_evol += 1
 
             current_evolutions.append(new_cell.genotype)
             current_rates = np.append(current_rates, growth_rate(new_cell.genotype, new_cell.phenotype, condition))
 
+            absolute_generations.append(new_cell.absolute_generation)
+            evolution_gererations.append(new_cell.evolution_generation)
+            generations_on_same_evolution.append(new_cell.generation_on_same_evolution)
+
+        mean_generation.append(np.mean(absolute_generations))
+        mean_evolution_generation.append(np.mean(evolution_gererations))
+        mean_generation_on_same_evolution.append(np.mean(generations_on_same_evolution))
+
         rate_evolution.append(np.mean(current_rates[1:]))
         mean_range.append(np.mean([genotype[1] - genotype[0] for genotype in current_evolutions]))
         
         if time > time_next_plot:
-            generations = [cell.generation for cell in cell_batch]
-            print(f"N_evolution : {n_evol}, N_adaptation : {n_adapt}, N_death : {n_death}, N_born : {n_born}, N_events : {n_events}, N_evol_without_adaptation : {n_evol_wa}")
-            print(f"Mean generation : {np.mean(generations)}, Max generation : {max(generations)}, Min generation : {min(generations)}, Median generation : {np.median(generations)} , Std generation : {np.std(generations)}")
+            
+            print(f"N_evolution : {n_evol}, N_adaptation : {n_adapt}, N_death : {n_death}, N_born : {n_born}, N_events : {n_events}, N_evol_without_adaptation : {n_evol_wa}\n")
+
+            print(f"Mean generation : {np.mean(absolute_generations)},"  
+                   + f"Max generation : {max(absolute_generations)},"
+                   + f"Min generation : {min(absolute_generations)}," 
+                   + f"Median generation : {np.median(absolute_generations)} ,"
+                   + f"Std generation : {np.std(absolute_generations)} \n")
+            
+            print(f"Mean evolution generation : {np.mean(evolution_gererations)},"
+                  + f"Max evolution generation : {max(evolution_gererations)},"
+                  + f"Min evolution generation : {min(evolution_gererations)},"
+                  +  f"Median evolution generation : {np.median(evolution_gererations)} ,"
+                  + f"Std evolution generation : {np.std(evolution_gererations)} \n")
+            
+            print(f"Mean generation on same evolution : {np.mean(generations_on_same_evolution)},"
+                    + f"Max generation on same evolution : {max(generations_on_same_evolution)},"
+                    +  f"Median generation on same evolution : {np.median(generations_on_same_evolution)} ,"
+                    + f"Std generation on same evolution : {np.std(generations_on_same_evolution)} \n")
+            
             print_hist(current_evolutions)
             print(f"Time : {time}")
             time_next_plot += time_between_plot
 
-    return timesteps, populations, current_evolutions, rate_evolution, mean_range
+    return timesteps, populations, current_evolutions, rate_evolution, mean_range, mean_generation, mean_evolution_generation, mean_generation_on_same_evolution
 
 
 
-period_duration = 60
-condition_profile = [(t/10, np.sin(2 * np.pi * t/(10*period_duration))**2) for t in range(6000)]
+period_duration = 50 
+condition_profile = [(t/10, np.sin(2 * np.pi * t/(10*period_duration*2))**2) for t in range(2000)]
+condition_profile.extend([(200+ t/10, 0.2 +np.sin(2 * np.pi * t/(10*period_duration*2))**2) for t in range(2000)])
 
-population = 2000
+population = 1500
 adaptation_probability = 0.1
 evolution_probability = 0.1
 evolution_without_adaptation_probability = 5e-4
@@ -189,10 +251,10 @@ probability_to_loose_adaptation = 1/mean_time_to_loose_adaptation
 maxs = np.random.uniform(0.5, 1.2, population)
 mins = np.random.uniform(-0.2, 0.5, population)
 initial_evolutions = [(mins[i], maxs[i]) for i in range(population)]
-death_rate = 0.4
-total_time =600
+death_rate = 0.38
+total_time = 400
 start = time.time()
-timesteps,  populations, current_evolutions, rate_evolution, mean_range = gillespie_algorithm(  initial_evolutions,  
+timesteps,  populations, current_evolutions, rate_evolution, mean_range, mean_generation, mean_evolution_generation, mean_generation_on_same_evolution= gillespie_algorithm(  initial_evolutions,  
                                                                                                 total_time, 
                                                                                                 condition_profile,
                                                                                                 evolutions_probability = evolution_probability,
@@ -200,7 +262,7 @@ timesteps,  populations, current_evolutions, rate_evolution, mean_range = gilles
                                                                                                 evol_probability_without_adaptation = evolution_without_adaptation_probability, 
                                                                                                 probability_to_loose_adaptation = probability_to_loose_adaptation,
                                                                                                 death_rate=death_rate,
-                                                                                                n_plot=1)
+                                                                                                n_plot=2)
 stop = time.time()
 
 
@@ -214,12 +276,12 @@ averages = np.array([])
 end_indexes = []   
 time_periods = []
 end_index = 0
-for start_index in range(len(timesteps)-1):
-        while not( timesteps[end_index] - timesteps[start_index] >= period_duration):
+for start_index in range(len(timesteps)):
+        while not( timesteps[end_index] - timesteps[start_index] >= period_duration*2):
             end_index += 1
-            if end_index == len(timesteps):
+            if end_index == len(timesteps) -1 :
                 break
-        if end_index == len(timesteps):
+        if end_index == len(timesteps) -1 :
             break
         end_indexes.append(end_index)
         time_periods.append(timesteps[end_index])
@@ -233,10 +295,9 @@ cumulative_growth_sum = np.cumsum(normalized_growth_rates)
 stop = time.time()
 print(f"Execution time (cumulative sum calculation): {stop - start}s")
 start = time.time()
-averages = np.diff(cumulative_growth_sum[end_indexes] - cumulative_growth_sum[range(len(end_indexes))])
-
+averages = cumulative_growth_sum[end_indexes] - cumulative_growth_sum[range(len(end_indexes))]
 # Calculez la moyenne du taux de croissance pour chaque période de temps en divisant les sommes cumulatives par la durée de la période
-averages = averages / period_duration
+averages = averages / (period_duration*2)
 stop = time.time()
 print(f"Execution time (average calculation): {stop - start}s")
 # Plot the results
@@ -264,6 +325,24 @@ plt.figure()
 plt.plot(time_periods, averages)
 plt.xlabel('Time')
 plt.ylabel('Average growth rate')
+
+plt.figure()
+plt.plot(timesteps, mean_generation)
+plt.xlabel('Time')
+plt.ylabel('Mean generation')
+plt.title('Mean generation')
+
+plt.figure()
+plt.plot(timesteps, mean_evolution_generation)
+plt.xlabel('Time')
+plt.ylabel('Mean evolution generation')
+plt.title('Mean evolution generation')
+
+plt.figure()
+plt.plot(timesteps, mean_generation_on_same_evolution)
+plt.xlabel('Time')
+plt.ylabel('Mean generation on same evolution')
+plt.title('Mean generation on same evolution')
 
 
 plt.show()
