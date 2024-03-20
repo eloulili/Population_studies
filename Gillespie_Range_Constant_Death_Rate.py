@@ -3,8 +3,8 @@ import numpy as np
 import time
 import matplotlib.pyplot as plt
 
-DISTANT_COEFF = 4.5
-RANGE_COEFF = 1.8
+DISTANT_COEFF = 4.4
+RANGE_COEFF = 2
 
 np.random.seed(0)
 
@@ -106,7 +106,7 @@ def gillespie_algorithm(initial_evolutions,
     mean_evolution_generation = [np.mean(evolution_gererations)]
     mean_generation_on_same_evolution = [np.mean(generations_on_same_evolution)]
 
-    
+    genetic_richness = [len(set(current_evolutions))/len(current_evolutions)]
     while time < total_time:
         if time > change_time and condition_profile:
             change_time, condition = condition_profile.pop(0)
@@ -150,6 +150,7 @@ def gillespie_algorithm(initial_evolutions,
         n_events += 1
 
         timesteps.append(time)
+        genetic_richness.append(len(set(current_evolutions))/len(current_evolutions))
 
         if event == 0: #death
             dead_cell = np.random.choice(len(cell_batch))
@@ -205,7 +206,6 @@ def gillespie_algorithm(initial_evolutions,
         mean_generation.append(np.mean(absolute_generations))
         mean_evolution_generation.append(np.mean(evolution_gererations))
         mean_generation_on_same_evolution.append(np.mean(generations_on_same_evolution))
-
         rate_evolution.append(np.mean(current_rates[1:]))
         mean_range.append(np.mean([genotype[1] - genotype[0] for genotype in current_evolutions]))
         
@@ -234,15 +234,18 @@ def gillespie_algorithm(initial_evolutions,
             print(f"Time : {time}")
             time_next_plot += time_between_plot
 
-    return timesteps, populations, current_evolutions, rate_evolution, mean_range, mean_generation, mean_evolution_generation, mean_generation_on_same_evolution
+    return timesteps, populations, current_evolutions, rate_evolution, mean_range, mean_generation, mean_evolution_generation, mean_generation_on_same_evolution, genetic_richness
 
 
 
 period_duration = 50 
-condition_profile = [(t/10, np.sin(2 * np.pi * t/(10*period_duration*2))**2) for t in range(2000)]
-condition_profile.extend([(200+ t/10, 0.2 +np.sin(2 * np.pi * t/(10*period_duration*2))**2) for t in range(2000)])
+condition_profile = [(t/10, np.sin(2 * np.pi * t/(10*period_duration*2))**2) for t in range(1500)]
+condition_profile.extend([(150+ t/10, 0.3 +np.sin(2 * np.pi * t/(10*period_duration*2))**2) for t in range(1500)])
+condition_profile.extend([(300+ t/10, np.sin(2 * np.pi * t/(10*period_duration*2))**2) for t in range(1500)])
+condition_profile.extend([(450+ t/10, 0.3 +np.sin(2 * np.pi * t/(10*period_duration*2))**2) for t in range(1500)])
 
-population = 1500
+
+population = 4000
 adaptation_probability = 0.1
 evolution_probability = 0.1
 evolution_without_adaptation_probability = 5e-4
@@ -251,10 +254,14 @@ probability_to_loose_adaptation = 1/mean_time_to_loose_adaptation
 maxs = np.random.uniform(0.5, 1.2, population)
 mins = np.random.uniform(-0.2, 0.5, population)
 initial_evolutions = [(mins[i], maxs[i]) for i in range(population)]
-death_rate = 0.38
-total_time = 400
+death_rate = 0.365
+total_time = 600
 start = time.time()
-timesteps,  populations, current_evolutions, rate_evolution, mean_range, mean_generation, mean_evolution_generation, mean_generation_on_same_evolution= gillespie_algorithm(  initial_evolutions,  
+(timesteps,  
+ populations, current_evolutions, 
+ rate_evolution, mean_range, 
+ mean_generation, mean_evolution_generation,
+   mean_generation_on_same_evolution, genetic_richness)= gillespie_algorithm(  initial_evolutions,  
                                                                                                 total_time, 
                                                                                                 condition_profile,
                                                                                                 evolutions_probability = evolution_probability,
@@ -262,7 +269,7 @@ timesteps,  populations, current_evolutions, rate_evolution, mean_range, mean_ge
                                                                                                 evol_probability_without_adaptation = evolution_without_adaptation_probability, 
                                                                                                 probability_to_loose_adaptation = probability_to_loose_adaptation,
                                                                                                 death_rate=death_rate,
-                                                                                                n_plot=2)
+                                                                                                n_plot=4)
 stop = time.time()
 
 
@@ -277,7 +284,7 @@ end_indexes = []
 time_periods = []
 end_index = 0
 for start_index in range(len(timesteps)):
-        while not( timesteps[end_index] - timesteps[start_index] >= period_duration*2):
+        while not( timesteps[end_index] - timesteps[start_index] >= period_duration):
             end_index += 1
             if end_index == len(timesteps) -1 :
                 break
@@ -297,8 +304,12 @@ print(f"Execution time (cumulative sum calculation): {stop - start}s")
 start = time.time()
 averages = cumulative_growth_sum[end_indexes] - cumulative_growth_sum[range(len(end_indexes))]
 # Calculez la moyenne du taux de croissance pour chaque période de temps en divisant les sommes cumulatives par la durée de la période
-averages = averages / (period_duration*2)
+averages = averages / (period_duration)
 stop = time.time()
+
+indices_10s = [i for i in range(len(timesteps)) if timesteps[i] >= 10]
+genetic_richness_10s = [genetic_richness[i] for i in indices_10s]
+time_10s = [timesteps[i] for i in indices_10s]
 print(f"Execution time (average calculation): {stop - start}s")
 # Plot the results
 
@@ -324,7 +335,7 @@ plt.title('Mean range')
 plt.figure()
 plt.plot(time_periods, averages)
 plt.xlabel('Time')
-plt.ylabel('Average growth rate')
+plt.ylabel('Average growth rate on one period')
 
 plt.figure()
 plt.plot(timesteps, mean_generation)
@@ -343,6 +354,12 @@ plt.plot(timesteps, mean_generation_on_same_evolution)
 plt.xlabel('Time')
 plt.ylabel('Mean generation on same evolution')
 plt.title('Mean generation on same evolution')
+
+plt.figure()
+plt.plot(time_10s, genetic_richness_10s)
+plt.xlabel('Time')
+plt.ylabel('Genetic richness')
+plt.title('Genetic richness')
 
 
 plt.show()
