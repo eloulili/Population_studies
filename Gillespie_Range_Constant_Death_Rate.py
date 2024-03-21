@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 
 DISTANT_COEFF = 4.4
 RANGE_COEFF = 2
-MAX_GROWTH_RATE = 0.8
+MAX_GROWTH_RATE = 1
 
 np.random.seed(0)
 
@@ -38,7 +38,7 @@ def growth_rate( genotype, phenotype, condition):
     if phenotype is not None:
         min_p, max_p = phenotype
         mini, maxi = min(min_p, min_g), max(max_p, max_g)
-    return 1/((1 + np.abs(max_g - min_g)*RANGE_COEFF)) * np.exp(-DISTANT_COEFF*(distant_range(mini, maxi, condition))) # Penality for the distance and the range
+    return MAX_GROWTH_RATE/((1 + np.abs(max_g - min_g)*RANGE_COEFF)) * np.exp(-DISTANT_COEFF*(distant_range(mini, maxi, condition))) # Penality for the distance and the range
 
 
 
@@ -246,10 +246,10 @@ condition_profile.extend([(300+ t/10, np.sin(2 * np.pi * t/(10*period_duration*2
 condition_profile.extend([(450+ t/10, 0.3 +np.sin(2 * np.pi * t/(10*period_duration*2))**2) for t in range(1500)])
 """
 period_duration = 1
-condition_profile = [(0, 0.8)]
+condition_profile = [(1, 0.7)]
 
 
-population = 1000
+population = 2000
 adaptation_probability = 0.1
 evolution_probability = 0.1
 evolution_without_adaptation_probability = 5e-4
@@ -273,7 +273,7 @@ start = time.time()
                                                                                                 evol_probability_without_adaptation = evolution_without_adaptation_probability, 
                                                                                                 probability_to_loose_adaptation = probability_to_loose_adaptation,
                                                                                                 death_rate=death_rate,
-                                                                                                n_plot=4)
+                                                                                                n_plot=1)
 stop = time.time()
 
 
