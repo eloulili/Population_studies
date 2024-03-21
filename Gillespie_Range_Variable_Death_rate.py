@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 
 DISTANT_COEFF = 4.4
 RANGE_COEFF = 2
-N0 = 2500
-BASE_DEATH_RATE = 0.27
+N0 = 5000
+BASE_DEATH_RATE = 0.34
 
 np.random.seed(0)
 
@@ -50,7 +50,7 @@ def growth_rate( genotype, phenotype, condition):
     return 1/((1 + np.abs(max_g - min_g)*RANGE_COEFF)) * np.exp(-DISTANT_COEFF*(distant_range(mini, maxi, condition))) # Penality for the distance and the range
 
 def death_rate(N_cells):
-    return (np.exp(-N0/N_cells) + BASE_DEATH_RATE) * N_cells
+    return (max(0, N_cells/N0 -1) + BASE_DEATH_RATE)* N_cells
 
 
 class EvolutiveCells1D:
@@ -284,7 +284,7 @@ probability_to_loose_adaptation = 1/mean_time_to_loose_adaptation
 maxs = np.random.uniform(0.5, 1.2, population)
 mins = np.random.uniform(-0.2, 0.5, population)
 initial_evolutions = [(mins[i], maxs[i]) for i in range(population)]
-total_time = 1200
+total_time = 150
 start = time.time()
 (timesteps,  
  populations, current_evolutions, 
@@ -297,7 +297,7 @@ start = time.time()
                                                                                                 adaptation_probability = adaptation_probability,
                                                                                                 evol_probability_without_adaptation = evolution_without_adaptation_probability, 
                                                                                                 probability_to_loose_adaptation = probability_to_loose_adaptation,
-                                                                                                n_plot=4)
+                                                                                                n_plot=3)
 stop = time.time()
 
 
