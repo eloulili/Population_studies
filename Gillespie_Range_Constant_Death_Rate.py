@@ -25,13 +25,21 @@ def print_hist(genotypes, time ):
         max_point = int((max_g - min_val) / (max_val - min_val) * num_point)
         value[min_point:max_point] += 1
     value = [v/len(genotypes) for v in value]
-
+    mean_min_values  = np.mean([genotype[0] for genotype in genotypes])
+    mean_max_values = np.mean([genotype[1] for genotype in genotypes])
+    mean_value = (mean_max_values + mean_min_values) /2
     plt.plot(points, value)
+    plt.axvline(x = points[np.argmax(value)] , color='r', label='Maximal density')
+    plt.axvline(x = mean_min_values, color='g', label='Mean of min value')
+    plt.axvline(x = mean_max_values , color='b', label='Mean of max value')
+    plt.axvline(x =mean_value, color='y', label='Mean value')
+    plt.legend()
     plt.xlabel('Valeurs')
     plt.ylabel('Densité de probabilité')
     plt.title(f'Distribution des valeurs / population: {len(genotypes)} / time : {time}')
     plt.grid(True)
     plt.show()
+    return mean_value
 
 def growth_rate( genotype, phenotype, condition):
     min_g, max_g = genotype
@@ -84,13 +92,14 @@ def gillespie_algorithm(initial_evolutions,
     time_between_plot = total_time/n_plot
     time_next_plot = time_between_plot
     current_evolutions = list(initial_evolutions)
-    print_hist(current_evolutions, 0)
+    mean_value = print_hist(current_evolutions, 0)
     cell_batch = [EvolutiveCells1D(evolution, condition) for evolution in initial_evolutions]
     current_rates = np.array([cell.growth_rate for cell in cell_batch])
     current_rates = np.insert(current_rates, 0, death_rate * len(cell_batch))
     rate_evolution = [ np.mean(current_rates[1:])]
     total_rate = np.sum(current_rates)
 
+    mean_values = [mean_value]
     mean_range = [np.mean([genotype[1] - genotype[0] for genotype in current_evolutions])]
 
     absolute_generations = [cell.absolute_generation for cell in cell_batch]
@@ -134,7 +143,7 @@ def gillespie_algorithm(initial_evolutions,
                     + f"Std generation on same evolution : {np.std(generations_on_same_evolution)} \n")
             
             
-            print_hist(current_evolutions, time)
+            _ = print_hist(current_evolutions, time)
             break
         
         dt = np.random.exponential(1 / total_rate)
@@ -147,23 +156,25 @@ def gillespie_algorithm(initial_evolutions,
         genetic_diversity.append(len(set(current_evolutions))/len(current_evolutions))
 
         if event == 0: #death
-            dead_cell = np.random.choice(len(cell_batch))
-            cell_batch.pop(dead_cell)
+            dead_cell_index = np.random.choice(len(cell_batch))
+            dead_cell  = cell_batch.pop(dead_cell_index)
 
             if len(cell_batch) == 0:
                 print("extinction")
                 break
-
-            total_rate -= (death_rate + current_rates[dead_cell+1])
-
-            current_rates = np.delete(current_rates, dead_cell+1)
-            current_rates[0] -= death_rate
-            current_evolutions.pop(dead_cell)
-            absolute_generations.pop(dead_cell)
-            evolution_gererations.pop(dead_cell)
-            generations_on_same_evolution.pop(dead_cell)
-            n_death += 1
+            
             populations = np.append(populations, len(cell_batch))
+
+            total_rate -= (death_rate + current_rates[dead_cell_index+1])
+            mean_value = (mean_value * (populations[-1] + 1) - (dead_cell.genotype[1]+dead_cell.genotype[0]) / 2 )/ (populations[-1] )
+
+            current_rates = np.delete(current_rates, dead_cell_index+1)
+            current_rates[0] -= death_rate
+            current_evolutions.pop(dead_cell_index)
+            absolute_generations.pop(dead_cell_index)
+            evolution_gererations.pop(dead_cell_index)
+            generations_on_same_evolution.pop(dead_cell_index)
+            n_death += 1
         else:
             new_cell = cell_batch[event-1].copy(condition)
             cell_batch.append(new_cell)
@@ -197,6 +208,7 @@ def gillespie_algorithm(initial_evolutions,
                 new_cell.generation_on_same_evolution = 0
                 n_evol += 1
 
+            mean_value = (mean_value * (populations[-1] - 1) + (dead_cell.genotype[1]+dead_cell.genotype[0]) / 2 )/ (populations[-1] )
             current_evolutions.append(new_cell.genotype)
             current_rates = np.append(current_rates, growth_rate(new_cell.genotype, new_cell.phenotype, condition))
             total_rate += current_rates[-1]
@@ -210,6 +222,7 @@ def gillespie_algorithm(initial_evolutions,
         mean_generation_on_same_evolution.append(np.mean(generations_on_same_evolution))
         rate_evolution.append(np.mean(current_rates[1:]))
         mean_range.append(np.mean([genotype[1] - genotype[0] for genotype in current_evolutions]))
+        mean_values.append(mean_value)
         
         if time > time_next_plot:
             
@@ -232,11 +245,20 @@ def gillespie_algorithm(initial_evolutions,
                     +  f"Median generation on same evolution : {np.median(generations_on_same_evolution)} ,"
                     + f"Std generation on same evolution : {np.std(generations_on_same_evolution)} \n")
             
-            print_hist(current_evolutions)
+            _ = print_hist(current_evolutions, time)
             print(f"Time : {time}")
             time_next_plot += time_between_plot
 
-    return timesteps, populations, current_evolutions, rate_evolution, mean_range, mean_generation, mean_evolution_generation, mean_generation_on_same_evolution, genetic_diversity
+    return (timesteps, 
+            populations, 
+            current_evolutions, 
+            rate_evolution,
+            mean_range, 
+            mean_generation, 
+            mean_evolution_generation, 
+            mean_generation_on_same_evolution, 
+            genetic_diversity, 
+            mean_values)
 
 
 """
@@ -262,7 +284,7 @@ maxs = np.random.uniform(0.5, 1.2, population)
 mins = np.random.uniform(-0.2, 0.5, population)
 initial_evolutions = [(mins[i], maxs[i]) for i in range(population)]
 death_rate = 0.48
-total_time = 120
+total_time = 40 
 
 
 start = time.time()
@@ -270,7 +292,7 @@ start = time.time()
  populations, current_evolutions, 
  rate_evolution, mean_range, 
  mean_generation, mean_evolution_generation,
-   mean_generation_on_same_evolution, genetic_diversity)= gillespie_algorithm(  initial_evolutions,  
+   mean_generation_on_same_evolution, genetic_diversity, mean_values)= gillespie_algorithm(  initial_evolutions,  
                                                                                                 total_time, 
                                                                                                 condition_profile,
                                                                                                 evolutions_probability = evolution_probability,
@@ -336,15 +358,16 @@ plt.title('Population evolution')
 
 plt.figure()
 plt.plot(timesteps, rate_evolution)
+plt.plot(timesteps, [death_rate]*len(timesteps), label='Death rate')
 plt.xlabel('Time')
-plt.ylabel('Rate evolution')
-plt.title('Rate evolution')
+plt.ylabel('Growth rate')
+plt.title('Growth Rate evolution')
 
 plt.figure()
 plt.plot(timesteps, mean_range)
 plt.xlabel('Time')
 plt.ylabel('Mean range')
-plt.title('Mean range')
+plt.title('Mean range evolution')
 
 plt.figure()
 plt.plot(time_periods, averages)
@@ -374,6 +397,12 @@ plt.plot(time_10s, genetic_diversity_10s)
 plt.xlabel('Time')
 plt.ylabel('Genetic diversity')
 plt.title('Genetic diversity')
+
+plt.figure()
+plt.plot(timesteps, mean_values)
+plt.xlabel('Time')
+plt.ylabel('Mean value')
+plt.title('Mean value')
 
 
 plt.show()
