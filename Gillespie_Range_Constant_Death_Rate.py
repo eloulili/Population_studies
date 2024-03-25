@@ -12,7 +12,7 @@ np.random.seed(0)
 def distant_range(min_val, max_val, e): # distance between the range and the condition
     return max(0, max(min_val - e, e - max_val))
     
-def print_hist(genotypes, time = 0): 
+def print_hist(genotypes, time ): 
     # Plot the distribution of the genotypes
     num_point = 1000
     min_val = np.min([genotype[0] for genotype in genotypes])
@@ -355,7 +355,7 @@ plt.figure()
 plt.plot(timesteps, mean_generation)
 plt.xlabel('Time')
 plt.ylabel('Mean generation')
-plt.title('Mean generation')
+plt.title('Mean cell generation')
 
 plt.figure()
 plt.plot(timesteps, mean_evolution_generation)
