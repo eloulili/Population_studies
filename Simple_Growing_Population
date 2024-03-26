@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import time
 
-MAX_POPULATION = 4000
+MAX_POPULATION = 1000
 N_SIMULATIONS = 10
 
 def general_logistic_growth(population, growth_rate, carrying_capacity, alpha=1, beta=0, gamma=0):
@@ -151,12 +151,7 @@ def gillespie_algorithm(initial_cells,
     )
 
 
-#np.random.seed(0)
-initial_population = 450
-initial_cells = [Cell(0.11, "cell_1") for _ in range(initial_population)]
-total_time = 1
-death_rate = 0.03
-std_growth_rate = 1e-3
+
 """
 start = time.time()
 (timesteps, populations, 
@@ -292,6 +287,15 @@ plt.show()
 
 
 """
+
+
+np.random.seed(0)
+initial_population = 50
+initial_cells = [Cell(0.11, "cell_1") for _ in range(initial_population)]
+total_time = 500
+death_rate = 0.03
+std_growth_rate = 1e-3
+
 def broadcast_gillespie_algorithm(initial_cells,
                         total_time,
                         growth_rate_model,
@@ -304,9 +308,9 @@ def broadcast_gillespie_algorithm(initial_cells,
                         N_simulations=10):
 
     initial_population = len(initial_cells)
-    populations = np.array([ [initial_population for _ in range(N_simulations)]])
-    rate_evolution = np.array(np.array([np.mean([cell.growth_rate for cell in initial_cells]) for _ in range(N_simulations)]))
-    mean_generation = np.zeros((N_simulations, total_time + 1))
+    populations =[[ initial_population for _ in range(N_simulations)]]
+    rate_evolution = [np.array([np.mean([cell.growth_rate for cell in initial_cells]) for _ in range(N_simulations)])]
+    mean_generation = [[0] * N_simulations]
 
     cell_batch = []
     generations = []
@@ -316,11 +320,12 @@ def broadcast_gillespie_algorithm(initial_cells,
     current_rates = [[cell.growth_rate for cell in sim] for sim in cell_batch]
     sum_rates = np.sum(current_rates, axis=1)
     mean_rates = sum_rates / initial_population
-    effective_growth_rate_evolution = np.array(mean_rates - death_rate)
+    
 
 
     total_growth_rates = growth_rate_model(initial_population, mean_rates, carrying_capacity, alpha, beta, gamma)
     total_death_rates = [death_rate * initial_population ] * N_simulations
+    effective_growth_rate_evolution = [list(total_growth_rates / initial_population - death_rate)]
 
     current_time = 0
     timesteps = np.zeros(1)
@@ -363,7 +368,7 @@ def broadcast_gillespie_algorithm(initial_cells,
             sum_rates[sim_index] += new_cell.growth_rate
             mean_rates[sim_index] = sum_rates[sim_index] / len(cell_batch[sim_index])
             current_rates[sim_index].append(new_cell.growth_rate)
-            total_growth_rates[sim_index] = growth_rate_model(len(cell_batch), mean_rates[sim_index], carrying_capacity,alpha, beta, gamma)
+            total_growth_rates[sim_index] = growth_rate_model(len(cell_batch[sim_index]), mean_rates[sim_index], carrying_capacity,alpha, beta, gamma)
             generations[sim_index].append(new_cell.generation)
             N_borns[sim_index] += 1
 
@@ -371,10 +376,10 @@ def broadcast_gillespie_algorithm(initial_cells,
         timesteps = np.append(timesteps, current_time)
         next_time_steps[sim_index] = current_time + np.random.exponential(1 / (total_growth_rates[sim_index] + total_death_rates[sim_index]))
 
-        rate_evolution = np.append(rate_evolution, mean_rates)
-        effective_growth_rate_evolution = np.append(effective_growth_rate_evolution, total_growth_rates / len(cell_batch) - death_rate)
-        mean_generation = np.append(mean_generation, np.array([np.mean(generations[i]) for i in range(N_simulations)]))
-        populations = np.append(populations, [len(cell_batch[i]) for i in range(N_simulations)])
+        rate_evolution.append(mean_rates.copy())
+        effective_growth_rate_evolution.append( [total_growth_rates[i] / len(cell_batch[i]) - death_rate for i in range(N_simulations)])
+        mean_generation.append(np.array([np.mean(generations[i]) for i in range(N_simulations)]))
+        populations.append([len(cell_batch[i]) for i in range(N_simulations)])
 
     print("Simulation completed.")
 
@@ -382,7 +387,7 @@ def broadcast_gillespie_algorithm(initial_cells,
 
 
 start = time.time()
-(timesteps, populations, rate_evolution, effective_growth_rate_evolution, mean_generation) = broadcast_gillespie_algorithm(initial_cells, total_time, logistic_growth, MAX_POPULATION, death_rate=death_rate, N_simulations=N_SIMULATIONS)
+(timesteps, populations, rate_evolution, effective_growth_rate_evolution, mean_generation) = broadcast_gillespie_algorithm(initial_cells, total_time, logistic_growth, MAX_POPULATION, death_rate=death_rate, N_simulations=N_SIMULATIONS, std_growth_rate=std_growth_rate)
 stop = time.time()
 print(f"Execution time: {stop - start}")
 
@@ -392,10 +397,12 @@ print(f"Execution time: {stop - start}")
 
 
 # Extraire les valeurs pour le tracé
+start = time.time()
+populations = np.array(populations)
 average_populations = np.mean(populations, axis=1)
-average_rate_evolution = np.mean(rate_evolution, axis=0)
-average_effective_growth_rate_evolution =   np.mean(effective_growth_rate_evolution, axis=0)
-average_mean_generation = np.mean(mean_generation, axis=0)
+average_rate_evolution = np.mean(rate_evolution, axis=1)
+average_effective_growth_rate_evolution =   np.mean(effective_growth_rate_evolution, axis=1)
+average_mean_generation = np.mean(mean_generation, axis=1)
 stop = time.time()
 
 print(f"Execution time data treatment: {stop - start}")
