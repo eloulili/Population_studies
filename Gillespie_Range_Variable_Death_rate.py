@@ -35,9 +35,9 @@ def print_hist(genotypes):
     value = [v/len(genotypes) for v in value]
 
     plt.plot(points, value)
-    plt.xlabel('Valeurs')
-    plt.ylabel('Densité de probabilité')
-    plt.title('Distribution des valeurs'+ " population: "+ str(len(genotypes)))
+    plt.xlabel('Value')
+    plt.ylabel('Probability density')
+    plt.title('Distribution /'+ " population: "+ str(len(genotypes)))
     plt.grid(True)
     plt.show()
 
