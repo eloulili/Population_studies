@@ -157,11 +157,12 @@ def gillespie_algorithm(initial_cells,
 # Initialize parameters
 np.random.seed(0)
 initial_population = 300
-total_time = 200
+total_time = 20
 death_rate = 0.5
 initial_growth_rate = 0.5
 std_growth_rate = 0.001
-
+initial_cells = [Cell(initial_growth_rate, "cell_1") for _ in range(initial_population)]
+"""
 # Run the Gillespie algorithm for N_SIMULATIONS
 def run_gillespie_simulations(N_simulations, initial_population, growth_rate_model, total_time, carrying_capacity, death_rate, std_growth_rate):
     initial_cells = [[Cell(initial_growth_rate, "cell_1") for _ in range(initial_population)] for _ in range(N_simulations)]
@@ -358,7 +359,7 @@ def broadcast_gillespie_algorithm(initial_cells,
 
 
 start = time.time()
-(timesteps, populations, rate_evolution, effective_growth_rate_evolution, mean_generation) = broadcast_gillespie_algorithm(initial_cells, total_time, logistic_growth, MAX_POPULATION, death_rate=death_rate, N_simulations=N_SIMULATIONS, std_growth_rate=std_growth_rate)
+(timesteps, populations, rate_evolution, effective_growth_rate_evolution, mean_generation) = broadcast_gillespie_algorithm(initial_cells, total_time, exponential_growth, MAX_POPULATION, death_rate=death_rate, N_simulations=N_SIMULATIONS, std_growth_rate=std_growth_rate)
 stop = time.time()
 print(f"Execution time: {stop - start}")
 
@@ -406,4 +407,4 @@ plt.xlabel('Time')
 plt.ylabel('Average Mean Generation')
 
 plt.show()
-"""
+""""""
