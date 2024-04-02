@@ -1,9 +1,10 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import time
+import cProfile
 
 MAX_POPULATION = 1000
-N_SIMULATIONS = 1
+N_SIMULATIONS = 10
 MAX_NAME = 1
 
 
@@ -77,6 +78,7 @@ def gillespie_algorithm(
     gamma=0,
     std_growth_rate=5e-4,
     death_rate=0.5,
+    get_proportions = False
 ):
     current_population = len(initial_cells)
     populations = np.array([current_population])
@@ -102,20 +104,20 @@ def gillespie_algorithm(
     total_death_rate = death_rate * current_population
 
     generations = [0] * current_population
-    mean_generation = [0]
-    proportions_per_name = [get_proportion_per_name(cell_batch)]
+    sum_generation = 0
+    mean_generation = 0
+    mean_generation_evolution = [0]
+
+    proportions_per_name = []
+
+    if get_proportions:
+        proportions_per_name = [get_proportion_per_name(cell_batch)]
 
     while time < total_time:
 
-        # Checking for extinction
-        if current_population == 0:
-            print("extinction")
-            print(f"New Stop time: {time}")
-
-            break
 
         # Checking if the population is too large
-        if current_population > 4000:
+        if current_population > 20000:
             # Printing statistics and histograms and then breaking the loop
             print("overpopulation")
             print(f"New Stop time: {time}")
@@ -149,6 +151,7 @@ def gillespie_algorithm(
             dead_cell = cell_batch.pop(dead_cell_index)
             populations = np.append(populations, current_population)
             current_rates = np.delete(current_rates, dead_cell_index)
+
             generations.pop(dead_cell_index)
 
             sum_rates -= dead_cell.growth_rate
@@ -157,6 +160,9 @@ def gillespie_algorithm(
                 current_population, mean_rate, carrying_capacity, alpha, beta, gamma
             )
             total_death_rate -= death_rate
+
+            sum_generation -= dead_cell.generation
+            mean_generation = sum_generation / current_population
 
             n_death += 1
         else:
@@ -176,6 +182,8 @@ def gillespie_algorithm(
                 current_population, mean_rate, carrying_capacity, alpha, beta, gamma
             )
             generations.append(new_cell.generation)
+            sum_generation += new_cell.generation
+            mean_generation = sum_generation / current_population
 
         # Appending time and data for plotting
         timesteps.append(time)
@@ -184,8 +192,9 @@ def gillespie_algorithm(
         effective_growth_rate_evolution.append(
             total_growth_rate / current_population - death_rate
         )
-        mean_generation.append(np.mean(generations))
-        proportions_per_name.append(get_proportion_per_name(cell_batch))
+        mean_generation_evolution.append(mean_generation)
+        if get_proportions:
+            proportions_per_name.append(get_proportion_per_name(cell_batch))
 
     print(f"stop at time {time}")
     print(f"N_death : {n_death}, N_born : {n_born}, N_events : {n_events}\n")
@@ -195,25 +204,24 @@ def gillespie_algorithm(
         populations,
         np.array(rate_evolution),
         np.array(effective_growth_rate_evolution),
-        np.array(mean_generation),
+        np.array(mean_generation_evolution),
         proportions_per_name,
         time,
     )
 
-
 # Initialize parameters
 
 np.random.seed(0)
-initial_population = 300
-total_time = 150
-death_rate = 1
-initial_growth_rate = 1.01
+initial_population = 20
+total_time = 1000
+death_rate = 0.08
+initial_growth_rate = 0.1
 std_growth_rate = 0.001
 initial_cells = [
     Cell(initial_growth_rate + i % MAX_NAME / 200, i % MAX_NAME)
     for i in range(initial_population)
 ]
-
+get_proportion_per_name_list = False
 
 # Run the Gillespie algorithm for N_SIMULATIONS
 def run_gillespie_simulations(
@@ -224,6 +232,7 @@ def run_gillespie_simulations(
     carrying_capacity,
     death_rate,
     std_growth_rate,
+    get_proportion_per_name_list=False,
 ):
     initial_cells = [
         [Cell(initial_growth_rate, i % MAX_NAME) for i in range(initial_population)]
@@ -242,11 +251,16 @@ def run_gillespie_simulations(
                 carrying_capacity,
                 death_rate=death_rate,
                 std_growth_rate=std_growth_rate,
+                get_proportions=get_proportion_per_name_list,
             )
         )
         stop_time = min(stop_time, simulation_results[-1][-1])
     return simulation_results, stop_time
+"""""
 
+cProfile.run('run_gillespie_simulations(N_SIMULATIONS,    initial_population,    exponential_growth,    total_time,    MAX_POPULATION,    death_rate,    std_growth_rate,)', sort='tottime')
+
+"""""
 
 # Execute the Gillespie algorithm
 start = time.time()
@@ -258,10 +272,16 @@ simulation_results, stop_time = run_gillespie_simulations(
     MAX_POPULATION,
     death_rate,
     std_growth_rate,
+    get_proportion_per_name_list,
+
 )
 stop = time.time()
 
 print(f"Execution time gillespies: {stop - start}")
+
+
+
+
 
 # Postprocessing the data for plotting
 start = time.time()
@@ -282,7 +302,7 @@ rate_evolution_list = [result[2] for result in simulation_results]
 effective_growth_rate_evolution_list = [result[3] for result in simulation_results]
 mean_generation_list = [result[4] for result in simulation_results]
 
-get_proportion_per_name_list = [result[5] for result in simulation_results]
+proportion_per_name_list = [result[5] for result in simulation_results]
 # Array to store the results for each simulation
 extended_results = np.empty((len(merged_timesteps), N_SIMULATIONS, 4))
 
@@ -361,21 +381,24 @@ plt.title("Average Effective Growth Rate Evolution Over Mean Generation")
 plt.xlabel("Mean Generation")
 plt.ylabel("Average Effective Growth Rate Evolution")
 plt.grid(True)
-"""""
-for sim in range(N_SIMULATIONS):
-    plt.figure()
 
-    for i in range(MAX_NAME):
-        plt.plot(all_timesteps[sim], [proportion[i] for proportion in get_proportion_per_name_list[sim]], label=f'Name {i}')
-    plt.title(f'Proportion of cells with names over time for simulation {sim}')
-    plt.xlabel('Time')
-    plt.ylabel(f'Proportion of cells ')
-    plt.legend()
-"""
+if get_proportion_per_name_list:
+    for sim in range(N_SIMULATIONS):
+        plt.figure()
+
+        for i in range(MAX_NAME):
+            plt.plot(all_timesteps[sim], [proportion[i] for proportion in proportion_per_name_list[sim]], label=f'Name {i}')
+        plt.title(f'Proportion of cells with names over time for simulation {sim}')
+        plt.xlabel('Time')
+        plt.ylabel(f'Proportion of cells ')
+        plt.legend()
+
 plt.show()
 
 
-"""
+
+"""""
+
 
 # Non viable code
 
