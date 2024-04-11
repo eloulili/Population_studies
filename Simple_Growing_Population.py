@@ -117,7 +117,7 @@ def gillespie_algorithm(
 
 
         # Checking if the population is too large
-        if current_population > 20000:
+        if current_population > 6000:
             # Printing statistics and histograms and then breaking the loop
             print("overpopulation")
             print(f"New Stop time: {time}")
@@ -212,10 +212,10 @@ def gillespie_algorithm(
 # Initialize parameters
 
 np.random.seed(0)
-initial_population = 20
-total_time = 1000
-death_rate = 0.08
-initial_growth_rate = 0.1
+initial_population = 400
+total_time = 250
+death_rate = 1.003
+initial_growth_rate = 1.
 std_growth_rate = 0.001
 initial_cells = [
     Cell(initial_growth_rate + i % MAX_NAME / 200, i % MAX_NAME)
