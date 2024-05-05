@@ -1,11 +1,29 @@
 import numpy as np
+
+np.seterr(divide="ignore", invalid="ignore")
+
 import matplotlib.pyplot as plt
 import time
 import cProfile
 
 MAX_POPULATION = 1000
-N_SIMULATIONS = 10
+N_SIMULATIONS = 15
 MAX_NAME = 1
+
+# Initialize parameters
+
+np.random.seed(0)
+initial_population = 1000
+total_time = 20000
+death_rate = 0.01
+initial_growth_rate = 0.01
+std_growth_rate = 0.00005
+std_growth_rate_list = [std_growth_rate]
+get_proportion_per_name_list = False
+dt = 0.5
+chemostat = (6600, 0.7)
+variation_rate = 0.1
+smooth_coefficient = 1000
 
 
 def general_logistic_growth(
@@ -53,9 +71,9 @@ class Cell:
         self.name = name
         self.generation = 0
 
-    def reproduce(self, std_growth_rate=5e-4):
+    def reproduce(self, std_growth_rate=5e-4, variation_rate=0.1):
         new_growth_rate = max(
-            self.growth_rate + np.random.normal(0, std_growth_rate), 0
+            self.growth_rate + np.random.normal(0, std_growth_rate) * np.random.binomial(1,variation_rate), 0
         )
         new_cell = Cell(new_growth_rate, self.name)
         new_cell.generation = self.generation + 1
@@ -77,8 +95,10 @@ def gillespie_algorithm(
     beta=0,
     gamma=0,
     std_growth_rate=5e-4,
+    variation_rate=0.1,
     death_rate=0.5,
-    get_proportions = False
+    get_proportions=False,
+    chemostat = (-1,-1)
 ):
     current_population = len(initial_cells)
     populations = np.array([current_population])
@@ -97,7 +117,7 @@ def gillespie_algorithm(
     total_growth_rate = growth_rate_model(
         current_population, mean_rate, carrying_capacity, alpha, beta, gamma
     )
-    effective_growth_rate_evolution = [
+    theorical_growth_rate_evolution = [
         total_growth_rate / current_population - death_rate
     ]
 
@@ -110,20 +130,41 @@ def gillespie_algorithm(
 
     proportions_per_name = []
 
+    chemostat_time, chemostat_rate = chemostat[0], chemostat[1]
+    use_chemostat = False
+    if chemostat_time > 0 and chemostat_rate > 0:
+        next_chemostat_time = chemostat_time
+        use_chemostat = True
+
+
     if get_proportions:
         proportions_per_name = [get_proportion_per_name(cell_batch)]
 
     while time < total_time:
-
-
         # Checking if the population is too large
-        if current_population > 6000:
+        if current_population > 15000:
             # Printing statistics and histograms and then breaking the loop
             print("overpopulation")
             print(f"New Stop time: {time}")
 
             break
-
+        
+        if use_chemostat and time > next_chemostat_time:
+            n_removed = int(chemostat_rate * current_population)
+            if n_removed > 0:
+                removed_indexes = np.random.choice(current_population, n_removed, replace=False)
+                cell_batch = [cell_batch[i] for i in range(current_population) if i not in removed_indexes]
+                current_population -= n_removed
+                current_rates = np.array([cell.growth_rate for cell in cell_batch])
+                sum_rates = np.sum(current_rates)
+                mean_rate = sum_rates / current_population
+                total_growth_rate = growth_rate_model(
+                    current_population, mean_rate, carrying_capacity, alpha, beta, gamma
+                )
+                total_death_rate = death_rate * current_population
+                next_chemostat_time += chemostat_time
+                sum_generation = sum([cell.generation for cell in cell_batch])
+                mean_generation = sum_generation / current_population
         # Generating the next time step
         dt = np.random.exponential(1 / (total_growth_rate + total_death_rate))
         time += dt
@@ -170,7 +211,7 @@ def gillespie_algorithm(
             current_population += 1
             probabilities = current_rates / sum_rates
             new_cell_index = np.random.choice(len(current_rates), p=probabilities)
-            new_cell = cell_batch[new_cell_index].reproduce(std_growth_rate)
+            new_cell = cell_batch[new_cell_index].reproduce(std_growth_rate, variation_rate)
             cell_batch.append(new_cell)
             n_born += 1
             populations = np.append(populations, current_population)
@@ -189,7 +230,7 @@ def gillespie_algorithm(
         timesteps.append(time)
 
         rate_evolution.append(mean_rate)
-        effective_growth_rate_evolution.append(
+        theorical_growth_rate_evolution.append(
             total_growth_rate / current_population - death_rate
         )
         mean_generation_evolution.append(mean_generation)
@@ -203,25 +244,12 @@ def gillespie_algorithm(
         timesteps,
         populations,
         np.array(rate_evolution),
-        np.array(effective_growth_rate_evolution),
+        np.array(theorical_growth_rate_evolution),
         np.array(mean_generation_evolution),
         proportions_per_name,
         time,
     )
 
-# Initialize parameters
-
-np.random.seed(0)
-initial_population = 400
-total_time = 250
-death_rate = 1.003
-initial_growth_rate = 1.
-std_growth_rate = 0.001
-initial_cells = [
-    Cell(initial_growth_rate + i % MAX_NAME / 200, i % MAX_NAME)
-    for i in range(initial_population)
-]
-get_proportion_per_name_list = False
 
 # Run the Gillespie algorithm for N_SIMULATIONS
 def run_gillespie_simulations(
@@ -232,7 +260,9 @@ def run_gillespie_simulations(
     carrying_capacity,
     death_rate,
     std_growth_rate,
+    variation_rate,
     get_proportion_per_name_list=False,
+    chemostat = (-1,-1)
 ):
     initial_cells = [
         [Cell(initial_growth_rate, i % MAX_NAME) for i in range(initial_population)]
@@ -251,108 +281,194 @@ def run_gillespie_simulations(
                 carrying_capacity,
                 death_rate=death_rate,
                 std_growth_rate=std_growth_rate,
+                variation_rate=variation_rate,
                 get_proportions=get_proportion_per_name_list,
+                chemostat = chemostat
             )
         )
         stop_time = min(stop_time, simulation_results[-1][-1])
     return simulation_results, stop_time
+
+
+def run_multiple_gillespie_simulations(
+    N_simulations,
+    initial_population,
+    growth_rate_model,
+    total_time,
+    carrying_capacity,
+    death_rate,
+    std_growth_rate_list,
+    variation_rate,
+    get_proportion_per_name_list=False,
+    chemostat = (-1,-1)
+):
+    all_simulation_results = []
+    stop_time = total_time
+    initial_cells = [
+        [Cell(initial_growth_rate, i % MAX_NAME) for i in range(initial_population)]
+        for _ in range(N_simulations)
+    ]
+    for std_growth_rate in std_growth_rate_list:
+        simulation_results, stop_time = run_gillespie_simulations(
+            N_simulations,
+            initial_population,
+            growth_rate_model,
+            stop_time,
+            carrying_capacity,
+            death_rate,
+            std_growth_rate,
+            variation_rate,
+            get_proportion_per_name_list,
+            chemostat = chemostat
+        )
+        all_simulation_results.append((simulation_results, std_growth_rate))
+    return all_simulation_results, stop_time
+
+
 """""
 
 cProfile.run('run_gillespie_simulations(N_SIMULATIONS,    initial_population,    exponential_growth,    total_time,    MAX_POPULATION,    death_rate,    std_growth_rate,)', sort='tottime')
 
-"""""
+""" ""
 
 # Execute the Gillespie algorithm
 start = time.time()
-simulation_results, stop_time = run_gillespie_simulations(
+all_simulation_results, stop_time = run_multiple_gillespie_simulations(
     N_SIMULATIONS,
     initial_population,
     exponential_growth,
     total_time,
     MAX_POPULATION,
     death_rate,
-    std_growth_rate,
+    std_growth_rate_list,
+    variation_rate,
     get_proportion_per_name_list,
-
+    chemostat = chemostat
 )
 stop = time.time()
 
 print(f"Execution time gillespies: {stop - start}")
 
 
-
-
-
 # Postprocessing the data for plotting
 start = time.time()
-all_timesteps = [result[0] for result in simulation_results]
+all_timesteps = [
+    [result[0] for result in simulation_results[0]]
+    for simulation_results in all_simulation_results
+]
 
 # Merge and sort all timesteps
-merged_timesteps = np.concatenate(all_timesteps)
+merged_timesteps = np.concatenate(
+    [np.concatenate(all_timesteps[k]) for k in range(len(std_growth_rate_list))]
+)
 sorted_merged_timesteps = np.sort(merged_timesteps)
 
 # Delete duplicates
 merged_timesteps = np.unique(sorted_merged_timesteps)
 
 # Keep only the timesteps that are present in all simulations, so before the last timestep
-merged_timesteps = merged_timesteps[merged_timesteps < stop_time]
+timesteps = merged_timesteps[merged_timesteps < stop_time]
 
-populations_list = [result[1] for result in simulation_results]
-rate_evolution_list = [result[2] for result in simulation_results]
-effective_growth_rate_evolution_list = [result[3] for result in simulation_results]
-mean_generation_list = [result[4] for result in simulation_results]
+populations_list = [
+    [result[1] for result in simulation_results[0]]
+    for simulation_results in all_simulation_results
+]
+rate_evolution_list = [
+    [result[2] for result in simulation_results[0]]
+    for simulation_results in all_simulation_results
+]
+theorical_growth_rate_evolution_list = [
+    [result[3] for result in simulation_results[0]]
+    for simulation_results in all_simulation_results
+]
+mean_generation_list = [
+    [result[4] for result in simulation_results[0]]
+    for simulation_results in all_simulation_results
+]
 
-proportion_per_name_list = [result[5] for result in simulation_results]
+# proportion_per_name_list = [result[5] for result in simulation_results]
+all_simulation_results = None
 # Array to store the results for each simulation
-extended_results = np.empty((len(merged_timesteps), N_SIMULATIONS, 4))
+extended_results = np.empty(
+    (len(timesteps), len(std_growth_rate_list), N_SIMULATIONS, 4)
+)
 
 # For each simulation, find the indices of the timesteps in the merged timesteps
-for i in range(N_SIMULATIONS):
-    indices = np.searchsorted(all_timesteps[i], merged_timesteps)
-    indices[indices == 0] = 1  # Replace index 0 with 1 to avoid negative indices
-    indices = indices - 1  # Decrement by 1 to get the correct index
-    # Fill the extended results array with the values of the current simulation
-    extended_results[:, i, 0] = populations_list[i][indices]
-    extended_results[:, i, 1] = rate_evolution_list[i][indices]
-    extended_results[:, i, 2] = effective_growth_rate_evolution_list[i][indices]
-    extended_results[:, i, 3] = mean_generation_list[i][indices]
+for k in range(len(std_growth_rate_list)):
+    for i in range(N_SIMULATIONS):
+        indices = np.searchsorted(all_timesteps[k].pop(), timesteps)
+        indices[indices == 0] = 1  # Replace index 0 with 1 to avoid negative indices
+        indices = indices - 1  # Decrement by 1 to get the correct index
+        # Fill the extended results array with the values of the current simulation
+        extended_results[:, k, i, 0] = populations_list[k].pop()[indices]
+        extended_results[:, k, i, 1] = rate_evolution_list[k].pop()[indices]
+        extended_results[:, k, i, 2] = theorical_growth_rate_evolution_list[k].pop()[
+            indices
+        ]
+        extended_results[:, k, i, 3] = mean_generation_list[k].pop()[indices]
+        stop = time.time()
+        print(f"Execution time data treatment : {stop - start}")
 
 
-# Compute the average of the results
-averaged_results = np.mean(extended_results, axis=1)
+# Compute the average over all simulations
+start = time.time()
+average_populations = np.mean(extended_results[:, :, :, 0], axis=2)
+average_rate_evolution = np.mean(extended_results[:, :, :, 1], axis=2)
+average_theorical_growth_rate_evolution = np.mean(extended_results[:, :, :, 2], axis=2)
+average_mean_generation = np.mean(extended_results[:, :, :, 3], axis=2)
+extended_results = None
+stop = time.time()
+print(f"Execution time data treatment 2 : {stop - start}")
 
-# Extract the values for plotting
+"""""   
+#Compute effective growth rate ( from the population curve) takes time and is not readable without smoothing
+dt_index =  0
+dt_diff_indexes = []
+last_index = 0
+for i in range( len(timesteps)):
+        while dt_index < len(timesteps) - 1 and timesteps[dt_index] - timesteps[i] < dt:
+            dt_index += 1
+        if dt_index >= len(timesteps) - 1 or i == len(timesteps) - 1:
+            last_index = i 
+            break
+        dt_diff_indexes.append(dt_index)
+local_timesteps = timesteps[:last_index]
 
-timesteps = merged_timesteps
-average_populations = averaged_results[:, 0]
-average_rate_evolution = averaged_results[:, 1]
-average_effective_growth_rate_evolution = averaged_results[:, 2]
-average_mean_generation = averaged_results[:, 3]
+stop = time.time()
+print(f"Execution time data treatment 3 : {stop - start}")
+effective_growth_rate = [(average_populations[dt_diff_indexes[i]] - average_populations[i])/(average_populations[i] * (timesteps[dt_diff_indexes[i]] - local_timesteps[i])) for i in range(len(dt_diff_indexes) )]
+stop = time.time()
+print(f"Execution time data treatment 4 : {stop - start}")
+
+# Smooth the data : Does not works
+def smooth_data(data, timesteps, smooth_coefficient : int):
+    assert len(data) == len(timesteps)
+    smoothed_data = [None] * (len(data) - smooth_coefficient)
+    steps = [timesteps[i] - timesteps[i - 1] for i in range(1, len(data))]
+    total_time = sum(steps[:smooth_coefficient])
+    normalized_mean_data = sum([steps[i] * data[i] for i in range(smooth_coefficient)] )
+    for i in range(smooth_coefficient, len(data)):    
+            smoothed_data[i-smooth_coefficient] = normalized_mean_data / total_time
+            total_time += steps[i-1] - steps[i - smooth_coefficient -1]
+            normalized_mean_data = normalized_mean_data - data[i - smooth_coefficient] * steps[i - smooth_coefficient-1] + data[i] * steps[i-1]
+    return smoothed_data
+
+smooth_growth_rate = smooth_data(effective_growth_rate, local_timesteps, smooth_coefficient)
+"""
 stop = time.time()
 
-print(f"Execution time data treatment: {stop - start}")
-print(f"N_timesteps: {len(timesteps)}")
+print(f"Execution time data treatment 5 : {stop - start}")
+print("N_timesteps: ", len(timesteps))
 
-Min_population_curve = initial_population * np.exp(
-    (initial_growth_rate - death_rate) * timesteps
-)
-Max_population_curve = initial_population * np.exp(
-    max(average_effective_growth_rate_evolution) * timesteps
-)
 
 # Plot the curves
 
 plt.figure()
-plt.plot(
-    timesteps,
-    Min_population_curve,
-    label=f"Min Population Curve, r = {round(initial_growth_rate - death_rate)}",
-)
-plt.plot(timesteps, average_populations, label="Population evolution")
+plt.plot(timesteps, average_populations)
 plt.title("Average Population Over Time")
 plt.xlabel("Time")
 plt.ylabel("Average Population")
-plt.legend()
+
 
 plt.figure()
 plt.plot(timesteps, average_rate_evolution)
@@ -362,11 +478,15 @@ plt.ylabel("Average Rate Evolution")
 plt.grid(True)
 
 plt.figure()
-plt.plot(timesteps, average_effective_growth_rate_evolution)
+plt.plot(
+    timesteps, average_theorical_growth_rate_evolution, label="Theorical Growth Rate"
+)
+# plt.plot(local_timesteps[smooth_coefficient//2: - smooth_coefficient//2], smooth_growth_rate, label="Effective Growth Rate")
 plt.title("Average Effective Growth Rate Evolution Over Time")
 plt.xlabel("Time")
 plt.ylabel("Average Effective Growth Rate Evolution")
 plt.grid(True)
+plt.legend()
 
 
 plt.figure()
@@ -376,26 +496,13 @@ plt.xlabel("Time")
 plt.ylabel("Average Mean Generation")
 
 plt.figure()
-plt.plot(average_mean_generation, average_effective_growth_rate_evolution)
-plt.title("Average Effective Growth Rate Evolution Over Mean Generation")
+plt.plot(average_mean_generation, average_rate_evolution)
+plt.title("Average Inherent Growth Rate Evolution Over Mean Generation")
 plt.xlabel("Mean Generation")
 plt.ylabel("Average Effective Growth Rate Evolution")
 plt.grid(True)
 
-if get_proportion_per_name_list:
-    for sim in range(N_SIMULATIONS):
-        plt.figure()
-
-        for i in range(MAX_NAME):
-            plt.plot(all_timesteps[sim], [proportion[i] for proportion in proportion_per_name_list[sim]], label=f'Name {i}')
-        plt.title(f'Proportion of cells with names over time for simulation {sim}')
-        plt.xlabel('Time')
-        plt.ylabel(f'Proportion of cells ')
-        plt.legend()
-
 plt.show()
-
-
 
 """""
 
@@ -430,7 +537,7 @@ def broadcast_gillespie_algorithm(initial_cells,
 
     total_growth_rates = growth_rate_model(initial_population, mean_rates, carrying_capacity, alpha, beta, gamma)
     total_death_rates = np.full(N_simulations, death_rate * initial_population)
-    effective_growth_rate_evolution = [list(total_growth_rates / initial_population - death_rate)]
+    theorical_growth_rate_evolution = [list(total_growth_rates / initial_population - death_rate)]
 
     current_time = 0
     timesteps = np.array([0])
@@ -482,18 +589,18 @@ def broadcast_gillespie_algorithm(initial_cells,
         next_time_steps[sim_index] = current_time + current_time_steps[sim_index]
 
         rate_evolution = np.append(rate_evolution, [mean_rates], axis=0)
-        effective_growth_rate_evolution.append([total_growth_rates[i] / len(cell_batch[i]) - death_rate for i in range(N_simulations)])
+        theorical_growth_rate_evolution.append([total_growth_rates[i] / len(cell_batch[i]) - death_rate for i in range(N_simulations)])
         mean_generation = np.append(mean_generation, [np.mean(generations, axis=1)], axis=0)
         populations.append(np.array([len(cell_batch[i]) for i in range(N_simulations)]))
 
     print("Simulation completed.")
     print(f"Deaths: {N_deaths}, Births: {N_borns}")
 
-    return timesteps, populations, rate_evolution, effective_growth_rate_evolution, mean_generation
+    return timesteps, populations, rate_evolution, theorical_growth_rate_evolution, mean_generation
 
 
 start = time.time()
-(timesteps, populations, rate_evolution, effective_growth_rate_evolution, mean_generation) = broadcast_gillespie_algorithm(initial_cells, total_time, exponential_growth, MAX_POPULATION, death_rate=death_rate, N_simulations=N_SIMULATIONS, std_growth_rate=std_growth_rate)
+(timesteps, populations, rate_evolution, theorical_growth_rate_evolution, mean_generation) = broadcast_gillespie_algorithm(initial_cells, total_time, exponential_growth, MAX_POPULATION, death_rate=death_rate, N_simulations=N_SIMULATIONS, std_growth_rate=std_growth_rate)
 stop = time.time()
 print(f"Execution time: {stop - start}")
 
@@ -507,7 +614,7 @@ start = time.time()
 populations = np.array(populations)
 average_populations = np.mean(populations, axis=0)
 average_rate_evolution = np.mean(rate_evolution, axis=1)
-average_effective_growth_rate_evolution =   np.mean(effective_growth_rate_evolution, axis=1)
+average_theorical_growth_rate_evolution =   np.mean(theorical_growth_rate_evolution, axis=1)
 average_mean_generation = np.mean(mean_generation, axis=1)
 stop = time.time()
 
@@ -528,7 +635,7 @@ plt.xlabel('Time')
 plt.ylabel('Average Rate Evolution')
 
 plt.figure()
-plt.plot(timesteps, average_effective_growth_rate_evolution)
+plt.plot(timesteps, average_theorical_growth_rate_evolution)
 plt.title('Average Effective Growth Rate Evolution Over Time')
 plt.xlabel('Time')
 plt.ylabel('Average Effective Growth Rate Evolution')

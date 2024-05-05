@@ -78,7 +78,7 @@ def gillespie_algorithm(
     gamma=0,
     std_growth_rate=5e-4,
     death_rate=0.5,
-    get_proportions = False
+    get_proportions=False,
 ):
     current_population = len(initial_cells)
     populations = np.array([current_population])
@@ -114,7 +114,6 @@ def gillespie_algorithm(
         proportions_per_name = [get_proportion_per_name(cell_batch)]
 
     while time < total_time:
-
 
         # Checking if the population is too large
         if current_population > 10000:
@@ -209,19 +208,21 @@ def gillespie_algorithm(
         time,
     )
 
+
 # Initialize parameters
 
 np.random.seed(0)
 initial_population = 600
 total_time = 400
 death_rate = 1.005
-initial_growth_rate = 1.
+initial_growth_rate = 1.0
 std_growth_rate = 0.001
 initial_cells = [
     Cell(initial_growth_rate + i % MAX_NAME / 200, i % MAX_NAME)
     for i in range(initial_population)
 ]
 get_proportion_per_name_list = False
+
 
 # Run the Gillespie algorithm for N_SIMULATIONS
 def run_gillespie_simulations(
@@ -258,4 +259,7 @@ def run_gillespie_simulations(
     return simulation_results, stop_time
 
 
-cProfile.run('run_gillespie_simulations(N_SIMULATIONS,    initial_population,    exponential_growth,    total_time,    MAX_POPULATION,    death_rate,    std_growth_rate,)', sort='tottime')
+cProfile.run(
+    "run_gillespie_simulations(N_SIMULATIONS,    initial_population,    exponential_growth,    total_time,    MAX_POPULATION,    death_rate,    std_growth_rate,)",
+    sort="tottime",
+)
