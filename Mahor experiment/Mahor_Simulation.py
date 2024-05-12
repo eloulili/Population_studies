@@ -9,6 +9,8 @@ MAX_CONDITIONS = 9
 probabilities = [0.1, 0.01, 1.1]
 first_evolution = [7]
 numbers = [200]
+total_time = 100
+
 conditions_profile = [
     (9, 1000),
     (8, 1000),
@@ -62,17 +64,29 @@ def growth_rate(best_gene_distance, evolutions, condition):
     )
 
 
+class Evolution:
+    def __init__(self, type, size, red, green, blue, temp):
+        self.type = type
+        self.size = size
+        self.red = red
+        self.green = green
+        self.blue = blue
+        self.temp = temp
+        self.evolution_generation = 0
+
+
+
 class EvolutiveCells1D:
-    def __init__(self, type: int, first_evolution: Optional[int] = None, conditions=0):
+    def __init__(self, type: int, first_evolution: Evolution, conditions=0):
 
         self.type = type
-        self.short_evolutions = (
-            []
-        )  # the first element is the adaptation, the second is the duration
-        self.long_evolution = first_evolution
+        self.evolution = first_evolution
         self.growth_rate = growth_rate(
             abs(first_evolution - conditions), self.long_evolution, conditions
         )
+        self.absolute_generation = 0
+        self.evolution_since_last_generation = 0
+        self.birth_date = 0
 
     def get_growth_rate(self):
         return self.growth_rate
@@ -90,20 +104,8 @@ class EvolutiveCells1D:
         best_distance = abs(self.long_evolution - conditions)
         new_evolution = -1
         new_adaptation = -1
-        if self.short_evolutions != []:
-            best_adaptation = min(
-                self.short_evolutions, key=lambda x: abs(x[0] - conditions)
-            )
-            best_distance = min(best_distance, abs(best_adaptation[0] - conditions))
         self.growth_rate = growth_rate(best_distance, self.long_evolution, conditions)
-        for evolution in self.short_evolutions:
-            if evolution[1] == 0:
-                self.short_evolutions.remove(evolution)
-            else:
-                evolution[1] -= 1
-
-            distance = abs(evolution[0] - self.long_evolution)
-            if np.random.uniform(0, 1) < probability_to_evolve / (
+        if np.random.uniform(0, 1) < probability_to_evolve / (
                 distance_mult**distance
             ):
                 self.long_evolution = evolution[0]
