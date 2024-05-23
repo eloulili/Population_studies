@@ -11,10 +11,10 @@ np.random.seed(0)
 
 # Define constants and simulation parameters.
 N = 500
-probabilities = [0.0005, 0.2, 0.00001]  # probabilities for evolution and loss of adaptation, and fixation
+probabilities = [0.002, 0.3, 0.0001]  # probabilities for evolution and loss of adaptation, and fixation
 first_evolution = [0]  # Initial evolution state
 numbers = [500]  # Number of entities
-conditions_profile = [(0,20000)]  # Environmental conditions profile
+conditions_profile = [(0,10000)]  # Environmental conditions profile
 
 # Constants for calculations within the growth rate functions.
 DISTANT_COEFF = 1
@@ -22,7 +22,7 @@ CST_VALUE = 0.04
 neutral_coefficient = np.exp(-CST_VALUE)  # Coefficient for adjusting growth based on a constant value.
 
 smooth_coefficient = 6000  # Coefficient for data smoothing operations.
-std = 0.5 # Standard deviation for normal distribution used in simulations.
+std = 1 # Standard deviation for normal distribution used in simulations.
 
 COND_COEF = 10  # Coefficient for condition-related calculations.
 growth_rate_error = 0.0000  # Error term in growth rate calculations.
@@ -90,7 +90,7 @@ class EvolutiveCells1D:
         has_fixed = False
         if self.epigenetic != self.base_epigenetic:
             if self.epigenetic != self.base_epigenetic and np.random.uniform(0, 1) < fix_probability:
-                self.base_epigenetic = self.epigenetic
+                self.base_epigenetic = self.epigenetic + 0.
                 quick_growth_rates[self.base_epigenetic] = growth_rate_function(abs(self.base_epigenetic - conditions), self.base_epigenetic, conditions)
                 self.previous_epigenetic = [self.base_epigenetic]
                 self.epigenetic_generation = 0
@@ -142,6 +142,7 @@ class EvolutiveCells1D:
         new_cell.generation_since_last_mutation = self.generation_since_last_mutation +1
         new_cell.epigenetic_generation = self.epigenetic_generation
         new_cell.previous_epigenetic = self.previous_epigenetic.copy()
+        new_cell.base_epigenetic = self.base_epigenetic
         return new_cell
 
 
@@ -301,6 +302,7 @@ class EvolutiveSample1D:
                 self.sum_epigenetic_generation = sum([cell.epigenetic_generation for cell in self.cells])
                 self.quantity_per_type.append(0)
                 self.growth_rate_per_type.append(0)
+                print("Fixed")
 
         if self.nb_types > 1:
             self.quantity_per_type[dead_cell.type] -= 1
@@ -415,11 +417,13 @@ def Moran_process(
             sample.genetic_tree.append(cell.previous_epigenetic + [cell.epigenetic])    
 
     transpose_quantity_type = [[] * sample.nb_types] 
+    """""
     for i in range(len(quantity_type)):
         for j in range(sample.nb_types):
             if len(transpose_quantity_type) <= j:
                 break
             transpose_quantity_type[j].append(quantity_type[i][j])
+    """
 
 
     return (
@@ -610,7 +614,6 @@ def main(
         plt.xlabel("Time")
         plt.ylabel("Mean growth rate by type")
         plt.title("Mean growth rate by type")
-        """""
         plt.figure()
         for i in range(sample.nb_types):
             plt.plot(timesteps[len(timesteps) - len(quantity_type[i]):], quantity_type[i], label=f"Type {i}")
@@ -618,7 +621,7 @@ def main(
         plt.ylabel("Proportion of cells by type")
         plt.title("Proportion of cells by type")
         plt.legend()
-
+        """
         plt.figure()
         for i in range(len(genetic_tree)):
             plt.plot(range(len(genetic_tree[i][1])),genetic_tree[i][1] , label=f"Evolution {genetic_tree[i][0]}")

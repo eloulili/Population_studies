@@ -1,245 +1,119 @@
+# Import necessary libraries for typing annotations, mathematical operations, plotting, profiling, and timing.
 from typing import Optional
 import numpy as np
-import matplotlib.scale as scle
 import matplotlib.pyplot as plt
+import cProfile
+import time
+import statistics
 
+# Set the seed for NumPy's random number generator to ensure reproducibility.
 np.random.seed(0)
-N = 200
-MAX_CONDITIONS = 9
-probabilities = [0.1, 0.01, 1.1]
-first_evolution = [7]
-numbers = [200]
-total_time = 100
 
-conditions_profile = [
-    (9, 1000),
-    (8, 1000),
-    (7, 1000),
-    (6, 1000),
-    (5, 1000),
-    (4, 1000),
-    (3, 1000),
-    (2, 1000),
-    (1, 1000),
-    (0, 1000),
-    (9, 1000),
-    (8, 1000),
-    (7, 1000),
-    (6, 1000),
-    (5, 1000),
-    (4, 1000),
-    (3, 1000),
-    (2, 1000),
-    (1, 1000),
-    (0, 1000),
-    (9, 1000),
-    (8, 1000),
-    (7, 1000),
-    (6, 1000),
-    (5, 1000),
-    (4, 1000),
-    (3, 1000),
-    (2, 1000),
-    (1, 1000),
-    (0, 1000),
-]
-inherent_growth_rates = [
-    0.5 / (1.1**i) for i in range(MAX_CONDITIONS + 1)
-]  # assume that condition 0 is the best and condition 9 is the worst
-DISTANT_COEFF = 0.1
+# Define constants and simulation parameters.
+N = 400
+first_evolution = [[0,0,0,0,0,0]]  # Initial evolution state
+adaptation_probability = 1  # Probability of adaptation
+base_growth_rate = 0.5  # Base growth rate
+stds = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6]  # Standard deviations for the evolution
 
 
-def growth_rate(best_gene_distance, evolutions, condition):
-    return (
-        1 / (1 + 0.1 * best_gene_distance)
-        + inherent_growth_rates[max(evolutions, condition)]
-    )
-    # the first term is the adaptation, the second term is the inherent growth rate that can be capted by the cell
+
+n_iter = 5000  # Number of iterations for the simulation.
 
 
-def growth_rate(best_gene_distance, evolutions, condition):
-    return np.exp(
-        -(DISTANT_COEFF * best_gene_distance)
-        + inherent_growth_rates[max(evolutions, condition)]
-    )
+
+def smooth_data(data, timesteps, smooth_coefficient: int):
+    """Smooth data over a specified window of timesteps."""
+    assert len(data) == len(timesteps)  # Ensure data and timesteps match in length.
+    smoothed_data = [None] * (len(data) - smooth_coefficient)
+    steps = [timesteps[i] - timesteps[i - 1] for i in range(1, len(data))]
+    total_time = sum(steps[:smooth_coefficient])
+    normalized_mean_data = sum([steps[i] * data[i] for i in range(smooth_coefficient)])
+    for i in range(smooth_coefficient, len(data)):    
+        smoothed_data[i-smooth_coefficient] = normalized_mean_data / total_time
+        total_time += steps[i-1] - steps[i - smooth_coefficient -1]
+        normalized_mean_data = normalized_mean_data - data[i - smooth_coefficient] * steps[i - smooth_coefficient-1] + data[i] * steps[i-1]
+    return smoothed_data
 
 
-class Evolution:
-    def __init__(self, type, size, red, green, blue, temp):
+
+class EvolutiveCell:
+    """Class to represent an evolutionary cell with specific characteristics and behaviors."""
+    def __init__(self, type: int, epigenetic: list[float]):
         self.type = type
-        self.size = size
-        self.red = red
-        self.green = green
-        self.blue = blue
-        self.temp = temp
-        self.evolution_generation = 0
-
-
-
-class EvolutiveCells1D:
-    def __init__(self, type: int, first_evolution: Evolution, conditions=0):
-
-        self.type = type
-        self.evolution = first_evolution
-        self.growth_rate = growth_rate(
-            abs(first_evolution - conditions), self.long_evolution, conditions
-        )
+        self.epigenetic = epigenetic
         self.absolute_generation = 0
-        self.evolution_since_last_generation = 0
-        self.birth_date = 0
+        self.previous_epigenetic = [self.epigenetic]
 
-    def get_growth_rate(self):
-        return self.growth_rate
+    # Methods for updating cell state, copying the cell, and converting cell information to a string are omitted for brevity.
 
-    def get_name(self):
-        return self.name
+# More classes and functions such as EvolutiveSample1D, Moran_process, and main are defined here.
+# These functions handle simulation setup, execution, and data analysis, including adapting to new conditions, updating cell states, and visualizing results.
 
-    def update_cell(
-        self,
-        conditions,
-        probability_to_evolve: float = 0.1,
-        distance_mult: float = 1.1,
-        probability_to_adapt: float = 0.1,
-    ) -> tuple[int, int]:
-        best_distance = abs(self.long_evolution - conditions)
-        new_evolution = -1
-        new_adaptation = -1
-        self.growth_rate = growth_rate(best_distance, self.long_evolution, conditions)
-        if np.random.uniform(0, 1) < probability_to_evolve / (
-                distance_mult**distance
-            ):
-                self.long_evolution = evolution[0]
-                new_evolution = evolution[0]
+    def reproduce(self, probability_to_adapt: float = 0.1,
+        stds = list[float]):
 
-        if (
-            np.random.uniform(0, 1) < probability_to_adapt
-            and self.long_evolution != conditions
-        ):
-            if self.long_evolution < conditions:
-                new_adaptation = np.random.randint(self.long_evolution, conditions + 1)
-                self.short_evolutions.append([new_adaptation, 5])
-            else:
-                new_adaptation = np.random.randint(conditions, self.long_evolution + 1)
-                self.short_evolutions.append([new_adaptation, 5])
-        return new_evolution, new_adaptation
-
-    def copy(self, conditions):
-        new_cell = EvolutiveCells1D(self.type, conditions)
-        new_cell.short_evolutions = self.short_evolutions.copy()
-        new_cell.long_evolution = self.long_evolution
+        assert len(stds) == len(self.epigenetic)
+        new_cell = EvolutiveCell(self.type, epigenetic=self.epigenetic)
+        new_cell.absolute_generation = self.absolute_generation +1
+        new_cell.previous_epigenetic = self.previous_epigenetic.copy()
+        if np.random.uniform() < probability_to_adapt:
+            new_cell.previous_epigenetic.append([self.epigenetic])
+            new_epigenetic = list((np.random.normal(self.epigenetic, stds)))
+            new_cell.epigenetic = new_epigenetic
         return new_cell
 
-    def __str__(self):
-        return f"Cell of type {self.type} has adaptation {self.short_evolutions} and long evolution {self.long_evolution}"
 
+class EvolutiveSample:
 
-class EvolutiveSample1D:
-
-    def __init__(self, cells: list[EvolutiveCells1D], nb_types: int):
+    def __init__(self, cells: list[EvolutiveCell], nb_types: int):
         self.cells = cells
         self.n = len(cells)
+        self.cumulative_growth_rates = [] 
+        self.list_evolutions = [cell.epigenetic for cell in self.cells if cell.epigenetic is not None]  
+
+        # Variables used for tracking and analysis
+        self.sum_absolute_generation = 0
+        self.sum_evolution = cells[0].epigenetic.copy()
+        for i in  range(1, len(cells)):
+            for j in range(len(cells[i].epigenetic)):
+                self.sum_evolution[j] += cells[i].epigenetic[j]
+        
+        self.genetic_tree = []
+
+
         self.nb_types = nb_types
-        self.cumulative_growth_rates = []
-        self.conditions = None
-        self.evolution_count = [0 for i in range(MAX_CONDITIONS + 1)]
-        self.adaptation_count = [0 for i in range(MAX_CONDITIONS + 1)]
-        cumul = 0.0
-        for i in range(self.n):
-            cumul += self.cells[i].growth_rate
-            self.cumulative_growth_rates.append(cumul)
+        self.quantity_per_type = [None for _ in range(nb_types)]
+        for type in range(nb_types):
+            self.quantity_per_type[type] = sum([cell.type == type for cell in self.cells]) 
 
-    def change_conditions(self, conditions):
-        self.conditions = conditions
-        for cell in self.cells:
-            best_distance = abs(cell.long_evolution - conditions)
-            if cell.short_evolutions != []:
-                best_adaptation = min(
-                    cell.short_evolutions, key=lambda x: abs(x[0] - conditions)
-                )
-                best_distance = min(best_distance, abs(best_adaptation[0] - conditions))
-            cell.growth_rate = growth_rate(
-                best_distance, cell.long_evolution, conditions
-            )
-        cumul = 0.0
-        for i in range(self.n):
-            cumul += self.cells[i].growth_rate
-            self.cumulative_growth_rates[i]
-
-    def get_proportions_per_type(self):
-        return [
-            sum([cell.type == i for cell in self.cells]) / self.n
-            for i in range(self.nb_types)
-        ]
-
-    def get_mean_growth_rate(self):
-        return sum([cell.growth_rate for cell in self.cells]) / self.n
-
-    def get_mean_growth_rate_by_type(self):
-        growth_rate_by_type = []
-        for i in range(self.nb_types):
-            if sum([cell.type == i for cell in self.cells]) != 0:
-                growth_rate_by_type.append(
-                    sum([cell.growth_rate for cell in self.cells if cell.type == i])
-                    / sum([cell.type == i for cell in self.cells])
-                )
-            else:
-                growth_rate_by_type.append(0)
-        return growth_rate_by_type
-
-    def get_cumulative_growth_rate(self):
-        return self.cumulative_growth_rates[-1]
-
-    def get_proportions_per_evolution(self):
-        return [
-            sum([cell.long_evolution == i for cell in self.cells]) / self.n
-            for i in range(MAX_CONDITIONS + 1)
-        ]
-
-    def get_proportion_per_adaptation(self):
-        return [
-            sum(
-                [
-                    evolution[0] == i
-                    for cell in self.cells
-                    for evolution in cell.short_evolutions
-                ]
-            )
-            / self.n
-            for i in range(MAX_CONDITIONS + 1)
-        ]
-
-    def get_propotions_per_evolution_and_type(self, type: int):
-        assert type < self.nb_types
-        return [
-            sum([cell.long_evolution == i and cell.type == type for cell in self.cells])
-            / self.n
-            for i in range(MAX_CONDITIONS)
-        ]
 
     def update(
         self,
         birth_index,
-        death_index,
-        evolution_probabilty: float = 0.01,
-        adaptation_probability: float = 0.01,
-        distance_mult: float = 1.1,
+        stds = list[float],
+        adaptation_probability: float = 0.1,
     ):
-        new_cell = self.cells[birth_index].copy(self.conditions)
-        new_evol, new_adap = new_cell.update_cell(
-            self.conditions,
-            probability_to_evolve=evolution_probabilty,
-            distance_mult=distance_mult,
-            probability_to_adapt=adaptation_probability,
-        )
-        for i in range(death_index, self.n):
-            self.cumulative_growth_rates[i] += (
-                new_cell.growth_rate - self.cells[death_index].growth_rate
-            )
-        self.cells[death_index] = new_cell
-        if new_evol != -1:
-            self.evolution_count[new_evol] += 1
-        if new_adap != -1:
-            self.adaptation_count[new_adap] += 1
+        
+        # Update the sample by replacing a cell with a new one based on the birth and death indices, and possible evolution.
+        # Update also tracking variables and statistics.
+        new_cell = self.cells[birth_index].reproduce(adaptation_probability, stds)
+
+        evol_new_cell = new_cell.epigenetic 
+        
+        self.genetic_tree.append(new_cell.previous_epigenetic + [new_cell.epigenetic])
+
+        self.sum_absolute_generation += new_cell.absolute_generation
+
+
+        if self.nb_types > 1:
+            self.quantity_per_type[new_cell.type] += 1
+
+        for i in range(len(evol_new_cell)):
+            self.sum_evolution[i] += evol_new_cell[i]
+        self.list_evolutions.append(evol_new_cell)
+        self.cells.append(new_cell)
+        self.n += 1
 
     def __str__(self):
         string = ""
@@ -247,132 +121,164 @@ class EvolutiveSample1D:
             string += str(cell) + "\n"
 
         return string
+    
+    
+    def get_ascendance(self, list_evolution):
+        """Get the ascendance of a list of evolutions."""
+        tree = []
+        for evolution in list_evolution:
+            for tree_evolution in self.genetic_tree:
+                if evolution == tree_evolution[-1]:
+                    tree.append((evolution, tree_evolution))
+                    break
+        return tree
+
 
 
 def Moran_process(
-    sample: EvolutiveSample1D,
-    conditions_profile: list[tuple[int, int]],
-    evolution_probabilty: float = 0.01,
+    sample: EvolutiveSample,
     adaptation_probability: float = 0.01,
-    distance_mult: float = 1.1,
+    base_growth_rate: float = 0.5,
+    stds = list[float],    
 ):
-    proportions_type = [sample.get_proportions_per_type()]
-    proportions_evolution = [sample.get_proportions_per_evolution()]
-    proportion_adaptation = [sample.get_proportion_per_adaptation()]
-    proportion_any_adaptation = [0]
-    growth_rate_by_type = [sample.get_mean_growth_rate_by_type()]
-    growth_rates = [sample.get_mean_growth_rate()]
-    for conditions, n in conditions_profile:
-        sample.change_conditions(conditions)
-        for i in range(n):
-            birth_rate = np.random.uniform(0, sample.get_cumulative_growth_rate())
-            birth_index = np.searchsorted(sample.cumulative_growth_rates, birth_rate)
+    """Simulate the Moran process with adaptation and loss of adaptation.
+    To compute the next time step, we use an exponential distribution with the total growth rate as the rate parameter
+    like in a gillespie algorithm."""
 
-            death_index = np.random.randint(sample.n)
+    quantity_type = [sample.quantity_per_type.copy()]
+    absolute_generation = [sample.sum_absolute_generation/sample.n]
+    mean_epigenetic = [sample.sum_evolution[i]/sample.n for i in range(len(sample.sum_evolution))]
+    current_time = 0
+    timesteps = [0]
+    n_timesteps = 1
+    while sample.n < N:
+            next_time = np.random.exponential(1 / (sample.n * base_growth_rate))
+            current_time += next_time
+            birth_index = np.random.randint(sample.n)
+
             sample.update(
-                birth_index,
-                death_index,
-                evolution_probabilty,
-                adaptation_probability,
-                distance_mult,
+                birth_index = birth_index,
+                adaptation_probability = adaptation_probability,
+                stds = stds,
             )
-            proportions_type.append(sample.get_proportions_per_type())
-            proportions_evolution.append(sample.get_proportions_per_evolution())
-            growth_rate_by_type.append(sample.get_mean_growth_rate_by_type())
-            growth_rates.append(sample.get_mean_growth_rate())
-            proportion_adaptation.append(sample.get_proportion_per_adaptation())
-            proportion_any_adaptation.append(
-                sum(sample.get_proportion_per_adaptation())
-            )
-    print(
-        f"Evolutions count:{sample.evolution_count}, Total count: {sum(sample.evolution_count)}"
-    )
-    print(
-        f"Adaptations count:{sample.adaptation_count}, Total count: {sum(sample.adaptation_count)}"
-    )
+
+            timesteps.append(current_time)
+            absolute_generation.append(sample.sum_absolute_generation/sample.n)
+            quantity_type.append(sample.quantity_per_type.copy())
+            mean_epigenetic.append(sample.sum_evolution[i]/sample.n for i in range(len(sample.sum_evolution)))
+
+            n_timesteps += 1  
+
+    transpose_quantity_type = [[] * sample.nb_types] 
+    """""
+    for i in range(len(quantity_type)):
+        for j in range(sample.nb_types):
+            if len(transpose_quantity_type) <= j:
+                break
+            transpose_quantity_type[j].append(quantity_type[i][j])
+    """
+
 
     return (
-        proportions_evolution,
-        proportion_adaptation,
-        proportions_type,
-        growth_rate_by_type,
-        growth_rates,
-        proportion_any_adaptation,
+        timesteps,
+        transpose_quantity_type,
+        mean_epigenetic,
+        absolute_generation,
     )
 
 
 def main(
     first_evolution,
-    numbers,
-    conditions_profile: list[tuple[int, int]],
-    probabilities: Optional[list[float]] = None,
+    adaptation_probability: float = 0.01,
+    base_growth_rate: float = 0.5,
+    stds = list[float],
+    n_iter: int = 1,
 ):
-    assert len(first_evolution) == len(numbers)
-    for k in range(1):
+    np.random.seed(0)
+    cells = []
+    cells = [EvolutiveCell( 0, epigenetic=first_evolution[i]) for i in range(len(first_evolution))]
+    list_evolutions = []
+    variance_deviation_per_simulation = []
+    start = time.time()
+    for k in range(n_iter):
+        # Initialization, control the seed for reproducibility
         np.random.seed(k)
         cells = []
-        initial_conditions = conditions_profile[0][0]
-        for i in range(len(first_evolution)):
-            for j in range(numbers[i]):
-                cells.append(
-                    EvolutiveCells1D(i, first_evolution[i], initial_conditions)
-                )
-        sample = EvolutiveSample1D(
+        cells = [EvolutiveCell( 0, epigenetic=first_evolution[i]) for i in range(len(first_evolution))]
+
+
+        sample = EvolutiveSample(
             cells,
             len(first_evolution),
         )
-
-        if probabilities != None:
-            (
-                proportion_evolution,
-                proportion_adaptation,
-                proportions_type,
-                growth_rate_by_type,
-                mean_growth_rates,
-                proportion_any_adaptation,
+        
+        (timesteps,
+        quantity_type,
+        mean_epigenetic,
+        absolute_generation,
             ) = Moran_process(
                 sample,
-                conditions_profile,
-                probabilities[0],
-                probabilities[1],
-                probabilities[2],
+                adaptation_probability= adaptation_probability,
+                base_growth_rate= base_growth_rate,
+                stds = stds,
             )
-        else:
-            (
-                proportions_type,
-                proportion_evolution,
-                growth_rate_by_type,
-                mean_growth_rates,
-            ) = Moran_process(sample, conditions_profile)
+        list_evolutions.append(np.array(sample.list_evolutions).T)
+        iteration_std = np.std(sample.list_evolutions, axis=0)
+        variance_deviation_per_simulation.append(iteration_std)
+        print(f"{100 * k/n_iter}%")
+
+
+
+
+        # Plotting
+        """""
         plt.figure()
-        plt.plot(proportion_evolution, label=[f"evolution {i}" for i in range(10)])
-        plt.xlabel("Time")
-        plt.ylabel("Proportion of cells")
-        plt.title("Proportion of cells per evolution")
+        plt.plot(sample.list_evolutions)
         plt.legend()
+
+
         plt.figure()
-        plt.plot(proportion_adaptation, label=[f"evolution {i}" for i in range(10)])
+        plt.plot(timesteps, absolute_generation, label="Mean absolute generation")
         plt.xlabel("Time")
-        plt.ylabel("Proportion of cells")
-        plt.title("Proportion of cells per adaptation")
+        plt.ylabel("Mean absolute generation")
+        plt.title("Mean absolute generation")
+
+
+        plt.figure()
+        plt.plot(timesteps, mean_epigenetic, label="Mean epigenetic")
+        plt.xlabel("Time")
+        plt.ylabel("Mean epigenetic")
+        plt.title("Mean epigenetic")
         plt.legend()
+
         plt.figure()
-        plt.plot(mean_growth_rates)
-        plt.xlabel("Time")
-        plt.ylabel("Mean growth rate")
-        plt.title("Mean growth rate")
-        plt.figure()
-        plt.plot(proportions_type, label=[f"Type {i}" for i in range(10)])
-        plt.xlabel("Time")
-        plt.ylabel("Proportion of cells")
-        plt.title("Proportion of cells per type")
-        plt.legend()
-        plt.figure()
-        plt.plot(proportion_any_adaptation)
-        plt.xlabel("Time")
-        plt.ylabel("Proportion of cells")
-        plt.title("Proportion of cells with any adaptation")
+        for i in range(len(total_genetic_tree)):
+            plt.plot(range(len(total_genetic_tree[i][1])),total_genetic_tree[i][1] , label=f"Evolution {total_genetic_tree[i][0]}")
+        plt.xlabel("Generation")
+        plt.ylabel("Evolution")
+        plt.title("Total epigenetic tree")
+
+   
+
         plt.show()
 
+        """
+        (       timesteps,
+                list_evolution,
+                absolute_generation,
+                mean_epigenetic,
+                sample,
+                total_genetic_tree,
+            ) = None, None, None, None, None, None
+    end = time.time()
+    print(f"Time elapsed: {end - start}")
+    print(f"Mean variance of deviation: {np.mean(variance_deviation_per_simulation, axis=0)}")
+    print(f"Divided by individuals std: {np.mean(variance_deviation_per_simulation, axis=0)/stds}")
+    return timesteps
 
-main(first_evolution, numbers, conditions_profile, probabilities)
+
+
+#cProfile.run("main(first_evolution, numbers, conditions_profile, probabilities)", sort="tottime")
+
+main(first_evolution, n_iter=n_iter, stds=stds, adaptation_probability=adaptation_probability, base_growth_rate=base_growth_rate)
+
