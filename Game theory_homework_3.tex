@@ -1,0 +1,90 @@
+\documentclass[11pt, a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[francais]{babel}
+\usepackage{textcomp}
+\usepackage{mathtools,amssymb,amsthm}
+\usepackage{lmodern} 
+\usepackage{stmaryrd}
+
+\usepackage{geometry}
+\usepackage{xcolor}
+\usepackage{array}
+\usepackage{calc}
+\usepackage{amsmath}
+
+\usepackage{titlesec}
+\usepackage{titletoc}
+\usepackage{fancyhdr}
+\usepackage{titling}
+\usepackage{enumitem}
+\usepackage{eurosym}
+
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    urlcolor=blue,
+    filecolor=blue}
+    
+\geometry{hmargin=2.cm, vmargin = 2.cm}
+
+\usepackage{diagbox} % tableaux à double entrée
+
+\title{Algorithmic game theories : Solutions Concept}
+\author{Eliel Dzik}
+
+\begin{document}
+\date{}
+\maketitle
+
+
+\section{Dominated strategies}
+Let consider that player 1 has $n_1$ strategies and player 2 has $n_2$ strategies.
+If we show that we can prove in a polynomial time that a strategy is dominated,
+ then it will be possible to find all dominated strategies in a polynomial time since we just 
+ need to iterate over all strategies and $ n \times P(n) \in P(n) $ where $P(n)$ is the set of polynomial functions of $n$.
+
+Let consider a strategy $s$ of player 1 and $g(s,t)$ the payoff of player 1 when he plays $s$ and player 2 plays $t$.
+The function $t \rightarrow g(s,t)$ is convex over the set of strategies of player 2 because it is an expectancy, which convex.
+This is why we just need to evaluate pure strategies of player 2.
+Then, we just need to evaluate if $\forall t $pure strategy, $\exists s'$ pure such that $ g(s,t) < g(s',t)$.
+If it is the case, then $s$ is dominated. This algorithm is in $O(n_1 \times n_2)$.
+Finaly, the global algorithm is in $O(n_1 \times n_2 \times n_1 ) = O(n_1^2 \times n_2)$ which is polynomial.
+
+\section{Nash equilibrium}
+The first observation is that there is a symetry between the three players. 
+It is trivial that no Nash equilibrium can include pure strategies.
+Then, for each player $i$, we can consider the following mixed strategy : $(p_i, 1-p_i)$.
+For next steps, we will only denote a strategy by $p_i$.
+
+For player 1, the expected payoff is $$ g_1(p_1, p_2, p_3) = p_1 \times (1-p_2) \times (1-p_3) + (1-p_1) \times p_3 $$.
+The first part is when player 1 plays $a_1$, then he needs that player 2 plays $b_2$ and player 3 plays $c_2$.
+The second part is when player 1 plays $a_2$ and player 3 plays $c_1$.
+
+After some calculus, we find:
+$$
+g(p_1, p_2, p_3) = p_1 \times (1 + p_2p_3 - p_2 - 2p_3) + p_3
+$$
+
+If $ (1 + p_2p_3 - p_2 - 2p_3) < 0 $, the best response of player 1 is $p_1 = 0$.
+If $ (1 + p_2p_3 - p_2 - 2p_3) > 0 $, the best response of player 1 is $p_1 = 1$.
+These two cases are not Nash equilibria since they includes pure strategies.
+
+If $ (1 + p_2p_3 - p_2 - 2p_3) = 0 $, the best response of player 1 is $p_1 \in [0,1]$ : player 1 is indifferent.
+Let study this case.
+$$
+(1 + p_2p_3 - p_2 - 2p_3) = 0 \\
+\Leftrightarrow p_3 = \frac{1 - p_2}{2 - p_2}
+$$
+
+By symetry, we also have:
+$$
+p_1 = \frac{1 - p_3}{2 - p_3} \\
+p_2 = \frac{1 - p_1}{2 - p_1}
+$$
+
+We develop the first equation thanks to the two others:
+$$
+p_3 = \frac{1 - \frac{1-p_1}{2 - \frac{1 -p_1}{2 - p_}}}{2 - \frac{1-p_1}{2 - \frac{1 -p_1}{2 - p_}}} 
+$$
