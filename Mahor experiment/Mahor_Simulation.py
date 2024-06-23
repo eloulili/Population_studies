@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 import cProfile
 import time
 import statistics
+from scipy.stats import differential_entropy as entropy
+
 
 # Set the seed for NumPy's random number generator to ensure reproducibility.
 np.random.seed(0)
@@ -17,9 +19,40 @@ base_growth_rate = 0.5  # Base growth rate
 stds = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6]  # Standard deviations for the evolution
 n_iter = 1  # Number of iterations
 
-
 MULTIPLICATIVE = False
 SQUARE_ROOT = False
+PEAKS = np.array([[0],[1.5]])
+CHANGE_PEAK_PROBABILITY = 0.03
+
+def compute_next_time_step(n: int, base_growth_rate: float, type:str, variance:float = 0.05) -> float:
+    if type == "lognormal":
+        mu = np.log(base_growth_rate / np.sqrt(1 + variance / base_growth_rate ** 2))
+        sigma = np.sqrt(np.log(1 + variance / base_growth_rate ** 2))
+        return np.random.lognormal(mu , sigma)
+    if type == "exponential":
+        return np.random.exponential(1 / (n * base_growth_rate))
+
+def compute_new_epigenetic( mother_cell, stds: list[float], probability_to_adapt: float) -> list[float]:   
+    """
+    Compute the new epigenetic state of a cell based on its mother cell's epigenetic state and the standard deviations for each trait.
+    If the distribution of traits is multimodal, the new epigenetic state may be chosen from a set of peaks.
+    Feel free to modify this function to include additional logic or constraints as needed.
+    """
+    new_epigenetic = mother_cell.epigenetic.copy()
+    new_peak = mother_cell.associated_peak.copy()
+    if np.random.uniform() < probability_to_adapt:
+                    new_epigenetic =  mother_cell.epigenetic.copy()
+                    new_epigenetic = list(np.random.normal(mother_cell.epigenetic, stds))
+    if PEAKS is not None:
+                if np.random.uniform() < CHANGE_PEAK_PROBABILITY:
+                    new_peak = PEAKS[np.random.randint(0, len(PEAKS))]
+                    new_epigenetic =  new_peak
+                    new_epigenetic = list(np.random.normal(new_peak, stds))     
+    return new_epigenetic, new_peak                     
+    
+            
+
+
 
 def smooth_data(data, timesteps, smooth_coefficient: int):
     """Smooth data over a specified window of timesteps."""
@@ -43,50 +76,28 @@ class EvolutiveCell:
         self.epigenetic = epigenetic
         self.absolute_generation = 0
         self.previous_epigenetic = [self.epigenetic]
+        self.associated_peak = None
+        self.growth_rate = 0.5
 
     # Methods for updating cell state, copying the cell, and converting cell information to a string are omitted for brevity.
 
-# More classes and functions such as EvolutiveSample1D, Moran_process, and main are defined here.
-# These functions handle simulation setup, execution, and data analysis, including adapting to new conditions, updating cell states, and visualizing results.
+    # More classes and functions such as EvolutiveSample1D, Moran_process, and main are defined here.
+    # These functions handle simulation setup, execution, and data analysis, including adapting to new conditions, updating cell states, and visualizing results.
 
     def reproduce(self, probability_to_adapt: float = 0.1,
-        stds = list[float],
-        square_root: bool = SQUARE_ROOT,
-        use_multiplicative: bool = MULTIPLICATIVE,
-):
+        stds = list[float]):
 
         assert len(stds) == len(self.epigenetic)
         new_cell = EvolutiveCell(self.type, epigenetic=self.epigenetic)
         new_cell.absolute_generation = self.absolute_generation +1
         new_cell.previous_epigenetic = self.previous_epigenetic.copy()
-        if np.random.uniform() < probability_to_adapt:
-            new_epigenetic =  self.epigenetic.copy()
-            if not use_multiplicative:
-                new_cell.previous_epigenetic.append([self.epigenetic])
-                if square_root:
-                    new_epigenetic =  self.epigenetic.copy()
-
-                    addition = []
-                    for std in stds:
-                        a = np.random.normal(0, std) 
-                        addition.append(a**2 * np.sign(a))
-                    for i in range(len(new_epigenetic)):
-                        new_epigenetic[i] += addition[i]
-                else:
-                    new_epigenetic = list(np.random.normal(self.epigenetic, stds))
-            else:
-                
-                for i in range(len(self.epigenetic)):
-                    multiplicative = 1
-                    a = np.random.normal(0, stds[i])
-                    if square_root:
-                        multiplicative += a**2 * np.sign(a)
-                    else:
-                        multiplicative += a
-                    new_epigenetic[i] = self.epigenetic[i] * multiplicative
-                    
-            new_cell.epigenetic = new_epigenetic
+        new_epigenetic, new_peak = compute_new_epigenetic(self, stds, probability_to_adapt)
+        new_cell.epigenetic = new_epigenetic
+        new_cell.associated_peak = new_peak
+        if new_epigenetic != self.epigenetic:
+            new_cell.previous_epigenetic.append(new_epigenetic)
         return new_cell
+        
 
 
 class EvolutiveSample:
@@ -95,6 +106,7 @@ class EvolutiveSample:
         self.cells = cells
         self.n = len(cells)
         self.cumulative_growth_rates = [] 
+
         self.list_evolutions = [cell.epigenetic for cell in self.cells if cell.epigenetic is not None]  
 
         # Variables used for tracking and analysis
@@ -120,8 +132,7 @@ class EvolutiveSample:
         adaptation_probability: float = 0.1,
     ):
         
-        # Update the sample by replacing a cell with a new one based on the birth and death indices, and possible evolution.
-        # Update also tracking variables and statistics.
+        # Update the sample by adding a new cell based on the birth index and adaptation probability.
         new_cell = self.cells[birth_index].reproduce(adaptation_probability, stds)
 
         evol_new_cell = new_cell.epigenetic 
@@ -140,13 +151,6 @@ class EvolutiveSample:
         self.cells.append(new_cell)
         self.n += 1
 
-    def __str__(self):
-        string = ""
-        for cell in self.cells:
-            string += str(cell) + "\n"
-
-        return string
-    
     
     def get_ascendance(self, list_evolution):
         """Get the ascendance of a list of evolutions."""
@@ -160,27 +164,35 @@ class EvolutiveSample:
 
 
 
-def Moran_process(
+def Gillespie_function(
     sample: EvolutiveSample,
     adaptation_probability: float = 0.01,
     base_growth_rate: float = 0.5,
     stds = list[float],
     max_population_size: int = N
 ):
-    """Simulate the Moran process with adaptation and loss of adaptation.
-    To compute the next time step, we use an exponential distribution with the total growth rate as the rate parameter
-    like in a gillespie algorithm."""
+    """
+    Simulate the Moran process with adaptation and loss of adaptation.
+    To compute the next time step, the growth rate is drawn from a distribution chosen by the operator 
+    like in a gillespie algorithm.
+    """
 
     quantity_type = [sample.quantity_per_type.copy()]
     absolute_generation = [sample.sum_absolute_generation/sample.n]
-    mean_epigenetic = [sample.sum_evolution[i]/sample.n for i in range(len(sample.sum_evolution))]
+    mean_epigenetic = [[sample.sum_evolution[i]/sample.n for i in range(len(sample.sum_evolution))]]
     current_time = 0
     timesteps = [0]
     n_timesteps = 1
+    division_time = []
     while sample.n < max_population_size:
-            next_time = np.random.exponential(1 / (sample.n * base_growth_rate))
+            # Compute the next time step and update the sample.
+            next_time = compute_next_time_step(sample.n, base_growth_rate, "lognormal") / sample.n
             current_time += next_time
-            birth_index = np.random.randint(sample.n)
+            division_time.append(next_time * sample.n)
+            
+            #Chose randomly a cell to reproduce
+            birth_index = np.random.choice(range(sample.n))
+
 
             sample.update(
                 birth_index = birth_index,
@@ -191,25 +203,27 @@ def Moran_process(
             timesteps.append(current_time)
             absolute_generation.append(sample.sum_absolute_generation/sample.n)
             quantity_type.append(sample.quantity_per_type.copy())
-            mean_epigenetic.append(sample.sum_evolution[i]/sample.n for i in range(len(sample.sum_evolution)))
+            mean_epigenetic.append([sample.sum_evolution[i]/sample.n for i in range(len(sample.sum_evolution))])
 
             n_timesteps += 1  
 
     transpose_quantity_type = [[] * sample.nb_types] 
     """""
+    # If we want to use the quantity per type
     for i in range(len(quantity_type)):
         for j in range(sample.nb_types):
             if len(transpose_quantity_type) <= j:
                 break
             transpose_quantity_type[j].append(quantity_type[i][j])
     """
-
+    mean_epigenetic = np.array(mean_epigenetic).T
 
     return (
         timesteps,
         transpose_quantity_type,
         mean_epigenetic,
         absolute_generation,
+        division_time,
     )
 
 
@@ -221,6 +235,9 @@ def main(
     n_iter: int = 1,
     max_population_size: int = N
 ):
+    
+    # Compare the variance of the population of cells in one chamber with the variance of 
+    # the population of cells in all chambers, when the original cell is the same for all chambers.
     np.random.seed(0)
     cells = []
     cells = [EvolutiveCell( 0, epigenetic=first_evolution[i]) for i in range(len(first_evolution))]
@@ -243,7 +260,8 @@ def main(
         quantity_type,
         mean_epigenetic,
         absolute_generation,
-            ) = Moran_process(
+        division_time,
+            ) = Gillespie_function(
                 sample,
                 adaptation_probability= adaptation_probability,
                 base_growth_rate= base_growth_rate,
@@ -257,11 +275,7 @@ def main(
 
 
         # Plotting
-        """""
-        plt.figure()
-        plt.plot(sample.list_evolutions)
-        plt.legend()
-
+        """
 
         plt.figure()
         plt.plot(timesteps, absolute_generation, label="Mean absolute generation")
@@ -271,35 +285,37 @@ def main(
 
 
         plt.figure()
-        plt.plot(timesteps, mean_epigenetic, label="Mean epigenetic")
+        plt.plot(timesteps, mean_epigenetic[0], label="Mean epigenetic")
         plt.xlabel("Time")
         plt.ylabel("Mean epigenetic")
         plt.title("Mean epigenetic")
         plt.legend()
 
+
         plt.figure()
-        for i in range(len(total_genetic_tree)):
-            plt.plot(range(len(total_genetic_tree[i][1])),total_genetic_tree[i][1] , label=f"Evolution {total_genetic_tree[i][0]}")
-        plt.xlabel("Generation")
-        plt.ylabel("Evolution")
-        plt.title("Total epigenetic tree")
+        plt.hist(division_time, bins=100)
+        plt.xlabel("Time")
+        plt.ylabel("Frequency")
+        plt.title("Division time")
 
    
 
         plt.show()
 
-        """
+      """  
         (       timesteps,
                 list_evolution,
                 absolute_generation,
                 mean_epigenetic,
                 sample,
                 total_genetic_tree,
-            ) = None, None, None, None, None, None
+                division_time,
+            ) = None, None, None, None, None, None, None
     end = time.time()
 
     list_deviation_replicates = []
     evolution_first_std = []
+    entropies = []
     for i in range(len(stds)):
         evolutions_through_replicates = []
         for j in range(n_iter):
@@ -308,6 +324,7 @@ def main(
                 if evol != 0:
                     evolutions_through_replicates.append(list_evolutions[j][i][k])
         list_deviation_replicates.append(np.var(evolutions_through_replicates))
+        entropies.append(entropy(evolutions_through_replicates))
         if i == 0:
             evolution_first_std = evolutions_through_replicates
 
@@ -339,26 +356,35 @@ def main_lior(
     seed: int = 0,
     verbose: bool = True) :
 
+    """
+    We make a population of cells grow from one cell over n_1 generations.
+    We keep dilution_1 cells and make them grow over n_2 generations seperately.
+    We keep dilution_2 cells and we compare the variance of the population of cells with the variance of the dilution_2 cells.
+    """
+
     np.random.seed(seed)
     list_evolutions = []
     variance_deviation_per_simulation = []
+    entropy_per_simulation = []
     std_per_simulation = []
     mean_per_simulation = []
     start = time.time()
 
-    cells = [EvolutiveCell( 0, [1])]
-
+    cells = [EvolutiveCell( 0, [0])]
+    cells[0].associated_peak = [0]
 
     otiginal_sample = EvolutiveSample(
             cells,
             len(first_evolution),
         )
     max_population_size = 2**n_1  
+    # First growth
     (timesteps,
         quantity_type,
         mean_epigenetic,
         absolute_generation,
-            ) = Moran_process(
+        divisions_time,
+            ) = Gillespie_function(
                 otiginal_sample,
                 adaptation_probability= adaptation_probability,
                 base_growth_rate= base_growth_rate,
@@ -370,13 +396,15 @@ def main_lior(
     trigger = 0.05
     start = time.time()
     for i in range(int(dillution_1)):
+        # We take a random cell from the first population and make it grow over n_2 generations
         random_index = np.random.randint(otiginal_sample.n)
         original_cell = otiginal_sample.cells[random_index]
         new_sample = EvolutiveSample(cells = [original_cell], nb_types = 1)
         (timesteps, 
         quantity_type,
         mean_epigenetic, 
-        absolute_generation) = Moran_process(new_sample, adaptation_probability= adaptation_probability, base_growth_rate= base_growth_rate, stds = stds, max_population_size = max_population_size)
+        absolute_generation, 
+        divisions_time) = Gillespie_function(new_sample, adaptation_probability= adaptation_probability, base_growth_rate= base_growth_rate, stds = stds, max_population_size = max_population_size)
          
 
         evolutions = (np.array(new_sample.list_evolutions).T)
@@ -388,10 +416,12 @@ def main_lior(
             trigger += 0.05
     total_populations = []
     for k in range(len(list_evolutions)):
+        entropy_per_simulation.append(entropy(list_evolutions[k]))
         variance_deviation_per_simulation.append(np.var(list_evolutions[k]))
         for j in range(len(list_evolutions[k])):
             total_populations.append(list_evolutions[k][j])
     total_variance = np.var(total_populations)
+    total_entropy = entropy(total_populations)
     variance_inv = 1/np.array(variance_deviation_per_simulation)
     var_M = stds[0]**2 * adaptation_probability
 
@@ -404,8 +434,8 @@ def main_lior(
     #print(f" Expected ratio : { 1 + n_1/(n_2 - 1) * (1 + (np.mean(variance_deviation_per_simulation, axis=0) / mean_per_simulation)**2 ) }")
     
     CV_2 = (np.std(variance_deviation_per_simulation) / np.mean(variance_deviation_per_simulation))**2
-    expected_ratio = 1 + n_1/(n_2 - 1) * (1 + CV_2)
-    expected_ratio_v2 = 1 + var_M * (n_2 - 1) * np.mean(variance_inv)
+    expected_ratio = 1 + n_1/(n_2 - 1) * (1 + CV_2) 
+    expected_ratio_v2 = 1 + var_M * (n_2 - 1) * np.mean(variance_inv) # There are 2 expressions for the expected ratio, this is the second one
     effective_ratio = total_variance / np.mean(variance_deviation_per_simulation, axis=0)
     std_ratio = np.sqrt(CV_2)*(n_2 -1)/n_1
     
@@ -416,103 +446,48 @@ def main_lior(
     #print(f"Ratio of mean deviation through replicates: {np.mean(variance_deviation_per_simulation, axis=0)/total_variance}")
     print(f"Effective Ratio: {effective_ratio}")
     print(f"Is in the range: {expected_ratio - 1.96*std_ratio<= effective_ratio  and effective_ratio <= expected_ratio + 1.96*std_ratio}")
-    
+
+    print(f"Mean entropy: {np.mean(entropy_per_simulation)}")
+    print(f"Total entropy: {total_entropy}")
+    print(f"Ratio entropy: {total_entropy/np.mean(entropy_per_simulation)}")
+    if np.random.uniform() < 0.2: 
+        # Plot the distribution of the population sometimes
+        plt.hist(total_populations, bins=100)
+        plt.show()
+
+
     print(f"Parameters: stds =  {stds}, adaptation_probability = {adaptation_probability}, growth_rate = {base_growth_rate}, n_1 = {n_1}, dillution_1 = {dillution_1}, n_2 = {n_2}, dillution_2 = {dillution_2} ")
 
-    return expected_ratio_v2 - 1.96*std_ratio<= effective_ratio  and effective_ratio <= expected_ratio_v2 + 1.96*std_ratio,expected_ratio - 1.96*std_ratio<= effective_ratio  and effective_ratio <= expected_ratio + 1.96*std_ratio, effective_ratio, expected_ratio, expected_ratio_v2, std_ratio
+    return (expected_ratio_v2 - 1.96*std_ratio<= effective_ratio  and effective_ratio <= expected_ratio_v2 + 1.96*std_ratio,expected_ratio - 1.96*std_ratio<= effective_ratio  and effective_ratio <= expected_ratio + 1.96*std_ratio, effective_ratio, 
+            expected_ratio, expected_ratio_v2, std_ratio, total_variance, CV_2, total_entropy, np.mean(entropy_per_simulation), total_entropy/np.mean(entropy_per_simulation))
 
 n_in_range = 0
 n_in_range_v2 = 0
-for seed in range(100):
-    is_in_range_v2,is_in_range, effective_ratio, expected_ratio, expected_ratio_v2, std = main_lior(adaptation_probability= 1., base_growth_rate=base_growth_rate, stds = [0.1], n_1=15, dillution_1= 2000, n_2=8, dillution_2=256, seed=seed) 
+sum_ratio = 0
+sum_ratio_entropy = 0
+sum_cv = 0  
+sum_total_variance = 0
+sum_total_entropy = 0
+for seed in range(50):
+    is_in_range_v2,is_in_range, effective_ratio, expected_ratio, expected_ratio_v2, std, total_variance, cv_2, total_entropy, mean_entropy, ratio_entropy = main_lior(adaptation_probability= .8, base_growth_rate=base_growth_rate, stds = [0.15], n_1=17, dillution_1= 250, n_2=9, dillution_2=256, seed=seed, verbose=False) 
+    print(seed)
+    sum_ratio += effective_ratio
+    sum_ratio_entropy += ratio_entropy
+    sum_cv += np.sqrt(cv_2)
+    sum_total_variance += total_variance
+    sum_total_entropy += total_entropy
     if is_in_range:
         n_in_range += 1
 
     if is_in_range_v2:
         n_in_range_v2 += 1
 print(f"Number of simulations in range: {n_in_range}")
-print(f"Percentage of simulations in range: {n_in_range/100}")
+print(f"Percentage of simulations in range: {100 * n_in_range/50}%")
 print(f"Number of simulations in range v2: {n_in_range_v2}")
-print(f"Percentage of simulations in range v2: {n_in_range_v2/100}")
+print(f"Percentage of simulations in range v2: {100 * n_in_range_v2/50} %")
+print(f"Mean effective ratio: {sum_ratio/50}")
+print(f"Mean cv: {sum_cv/50}")
+print(f"Mean total variance: {sum_total_variance/50}\n")
+print(f"Mean total entropy: {sum_total_entropy/50}")
+print(f"Mean ratio entropy: {sum_ratio_entropy/50}")
 
-"""
-for n_1 in [15, 16, 17, 18, 19, 20, 21]:
-    n_in_range = 0
-    n_in_range_v2 = 0
-    effective_ratios = []
-    expected_ratios = []
-    expected_ratios_v2 = []
-    std_ratios = []
-    for seed in range(10):
-        is_in_range_v2,is_in_range, effective_ratio, expected_ratio, expected_ratio_v2, std = main_lior(adaptation_probability= adaptation_probability, base_growth_rate=base_growth_rate, stds = [0.1], n_1=n_1, dillution_1=500, n_2=12, dillution_2=2048, seed=seed, verbose=False)
-        effective_ratios.append(effective_ratio)
-        expected_ratios.append(expected_ratio)
-        expected_ratios_v2.append(expected_ratio_v2)
-        std_ratios.append(std)
-        if is_in_range:
-            n_in_range += 1
-        if is_in_range_v2:
-            n_in_range_v2 += 1
-    print(f"Number of simulations in range: {n_in_range}")
-    print(f"Percentage of simulations in range: {n_in_range/10}")
-    print(f"Number of simulations in range v2: {n_in_range_v2}")
-    print(f"Percentage of simulations in range v2: {n_in_range_v2/10}")
-    #print(f"Expected ratio: {expected_ratios}")
-    #print(f"Expected ratio v2: {expected_ratios_v2}")
-    #print(f"Effective ratio: {effective_ratios}")
-    print(f"STD on ratio: {std_ratios}")
-    print(f"Mean effective ratio: {np.mean(effective_ratios)}")
-    print(f"Mean expected ratio: {np.mean(expected_ratios)}")
-    print(f"Mean expected ratio v2: {np.mean(expected_ratios_v2)}")
-    print(f"Mean std ratio: {np.mean(std_ratios)}")
-"""
-
-
-
-"""""
-
-ratio, ratio_individual, evolutions= main(first_evolution, n_iter=n_iter, stds=stds, adaptation_probability=adaptation_probability, base_growth_rate=base_growth_rate, max_population_size=N)
-print(ratio)
-plt.hist(evolutions, bins=100)
-plt.show()
-
-
-ratios_per_probability = [] 
-individual_ratios_per_probability = []
-for adaptation_probability in [0.0005, 0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1]:
-    ratios_per_probability.append(main(first_evolution, n_iter=n_iter, stds=stds, adaptation_probability=adaptation_probability, base_growth_rate=base_growth_rate)[0])
-    individual_ratios_per_probability.append(main(first_evolution, n_iter=n_iter, stds=stds, adaptation_probability=adaptation_probability, base_growth_rate=base_growth_rate)[1])
-
-#ratios_per_population_size = [] 
-#individual_ratios_per_population_size = []
-#for max_population_size in [100,500,1000,5000,10000]:
-#    ratios_per_population_size.append(main(first_evolution, n_iter=n_iter, stds=stds, adaptation_probability=0.001, base_growth_rate=base_growth_rate, max_population_size=max_population_size)[0])
-#    individual_ratios_per_population_size.append(main(first_evolution, n_iter=n_iter, stds=stds, adaptation_probability=0.001, base_growth_rate=base_growth_rate, max_population_size=max_population_size)[1])
-#ratio_per_n_iter = []
-#for n_iter in [100,500,1000,5000,10000]:
-#    ratio_per_n_iter.append(main(first_evolution, n_iter=n_iter, stds=stds, adaptation_probability=0.05, base_growth_rate=base_growth_rate))
-
-
-plt.figure()
-plt.plot([0.0005, 0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1], ratios_per_probability, label="Mean variance")
-plt.plot([0.0005, 0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1], individual_ratios_per_probability, label="Individual variance")
-plt.loglog()
-plt.xlabel("Adaptation probability")
-plt.ylabel("Ratio of mean deviation through replicates")
-plt.title("Ratio of mean deviation through replicates as a function of adaptation probability")
-plt.legend()
-
-
-plt.figure()
-plt.plot([100,500,1000,5000,10000], ratios_per_population_size, label="Mean variance")
-plt.plot([100,500,1000,5000,10000], individual_ratios_per_population_size, label="Individual variance")
-plt.loglog()
-plt.xlabel("Max population size")
-plt.ylabel("Ratio of mean deviation through replicates")
-plt.title("Ratio of mean deviation through replicates as a function of max population size")
-plt.legend()
-
-
-plt.show()
-
-"""

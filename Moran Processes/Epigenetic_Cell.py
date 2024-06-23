@@ -9,23 +9,31 @@ import time
 # Set the seed for NumPy's random number generator to ensure reproducibility.
 np.random.seed(0)
 
+"""
+In this simulation, we run a Moran process with adaptation and loss of adaptation in a population of evolving cells.
+Each cell has a type( family name), an epigenetic value, and a growth rate that depends on the epigenetic value and environmental conditions.
+When a cell loses adaptation, it reverts to the last epigenetic value it had before adapting.
+It is possible for a cell to fixate its epigenetic value, meaning it will never go back.
+"""
+
+
 # Define constants and simulation parameters.
 N = 500
-probabilities = [0.002, 0.3, 0.0001]  # probabilities for evolution and loss of adaptation, and fixation
+probabilities = [0.1, 0.3, 0.0005]  # probabilities for evolution and loss of adaptation, and fixation
 first_evolution = [0]  # Initial evolution state
 numbers = [500]  # Number of entities
-conditions_profile = [(0,10000)]  # Environmental conditions profile
+conditions_profile = [(0,100)]  # Environmental conditions profile
 
 # Constants for calculations within the growth rate functions.
 DISTANT_COEFF = 1
-CST_VALUE = 0.04
+CST_VALUE = 0.5
 neutral_coefficient = np.exp(-CST_VALUE)  # Coefficient for adjusting growth based on a constant value.
 
-smooth_coefficient = 6000  # Coefficient for data smoothing operations.
+smooth_coefficient = 600  # Coefficient for data smoothing operations.
 std = 1 # Standard deviation for normal distribution used in simulations.
 
 COND_COEF = 10  # Coefficient for condition-related calculations.
-growth_rate_error = 0.0000  # Error term in growth rate calculations.
+growth_rate_error = 0.0001  # Error term in growth rate calculations.
 n_iter = 1  # Number of iterations for the simulation.
 
 trigger = 0  # Trigger level for certain conditional checks.
@@ -49,6 +57,18 @@ def growth_rate_function(best_gene_distance, epigenetic, condition):
     if epigenetic is None:
         return CST_VALUE
     return CST_VALUE + np.log(max(neutral_coefficient, 1 + DISTANT_COEFF * epigenetic)) / 20
+
+
+def compute_next_time_step(n: int, total_growth_rate: float, type:str, std:float = 0.01) -> float:
+    mean_time = 1/total_growth_rate
+    local_std = std / np.sqrt(n)
+    if type == "lognormal":
+        sigma = np.sqrt(np.log(1 + local_std**2 / mean_time ** 2))
+        mu = np.log(mean_time) - sigma ** 2 / 2  
+        return np.random.lognormal(mean=mu , sigma=sigma)
+    if type == "exponential":
+        return np.random.exponential(mean_time)
+        
 
 class EvolutiveCells1D:
     """Class to represent an evolutionary cell with specific characteristics and behaviors."""
@@ -116,7 +136,7 @@ class EvolutiveCells1D:
                 if self.epigenetic != self.base_epigenetic:
                     self.previous_epigenetic.append(self.epigenetic)
 
-                new_epigenetic = np.random.normal(self.epigenetic, std)
+                new_epigenetic = np.random.normal(self.epigenetic, std)  # Feel free to change the distribution
                 
                 self.epigenetic = new_epigenetic
                 self.epigenetic_generation += 1
@@ -381,13 +401,16 @@ def Moran_process(
     current_time = 0
     timesteps = [0]
     n_timesteps = 1
+    division_times = []
     for conditions, change_time in conditions_profile:
         sample.change_conditions(conditions)
         while current_time < change_time:
-            next_time = np.random.exponential(1 / sample.total_growth_rate)
+            next_time = compute_next_time_step(N, sample.total_growth_rate, "lognormal")
             current_time += next_time
             birth_rate = np.random.uniform(0, sample.total_growth_rate)
             birth_index = np.searchsorted(sample.cumulative_growth_rates, birth_rate) 
+            if next_time < 2 *  1 / CST_VALUE:
+                division_times.append(next_time*N )
 
             death_index = np.random.randint(sample.n)
             sample.update(
@@ -435,7 +458,8 @@ def Moran_process(
         sample.list_evolutions,
         absolute_generation,
         generation_since_last_evolution,
-        mean_epigenetic_generation
+        mean_epigenetic_generation,
+        division_times
     )
 
 
@@ -487,7 +511,8 @@ def main(
         sample.list_evolutions,
         absolute_generation,
         generation_since_last_evolution,
-        mean_epigenetic_generation
+        mean_epigenetic_generation,
+        division_times
             ) = Moran_process(
                 sample,
                 conditions_profile,
@@ -607,21 +632,7 @@ def main(
         plt.xlabel("Absolute generation")
         plt.ylabel("Mean growth rate")
         plt.title("Mean growth rate by absolute generation")
-        """""
-        plt.figure()
-        for i in range(len(numbers)):
-            plt.plot(timesteps, growth_rate_by_type[i], label=f"Type {i}")
-        plt.xlabel("Time")
-        plt.ylabel("Mean growth rate by type")
-        plt.title("Mean growth rate by type")
-        plt.figure()
-        for i in range(sample.nb_types):
-            plt.plot(timesteps[len(timesteps) - len(quantity_type[i]):], quantity_type[i], label=f"Type {i}")
-        plt.xlabel("Time")
-        plt.ylabel("Proportion of cells by type")
-        plt.title("Proportion of cells by type")
-        plt.legend()
-        """
+
         plt.figure()
         for i in range(len(genetic_tree)):
             plt.plot(range(len(genetic_tree[i][1])),genetic_tree[i][1] , label=f"Evolution {genetic_tree[i][0]}")
@@ -636,6 +647,12 @@ def main(
         plt.xlabel("Generation")
         plt.ylabel("Evolution")
         plt.title("Total epigenetic tree")
+
+        plt.figure()
+        plt.hist(division_times, bins=50)
+        plt.xlabel("Time")
+        plt.ylabel("Frequency")
+        plt.title("Division time distribution")
 
    
 
@@ -655,8 +672,9 @@ def main(
                 smoothed_mean_epigenetic,
                 smoothed_mean_generation_since_last_evolution,
                 total_genetic_tree,
-                genetic_tree
-            ) = None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None
+                genetic_tree,
+                division_times
+            ) = None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None
 
     print(f"First increasing tendency: {trigger_time}")
     print(f"Mean first increasing tendency: {sum(trigger_time)/n_iter}")

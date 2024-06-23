@@ -3,70 +3,75 @@ import numpy as np
 import time
 import matplotlib.pyplot as plt
 
+DISTANT_COEFF = 250
+
 np.random.seed(0)
-dict_genes = {"variability": 1, "phenotype": 2, "genotype": 3}
-dict_coeff = {"temperature": 70, "O2": 70, "nutrition": 70}
 
 
-class Genotype:
-    def __init__(self, values, variabilities):
-        self.temperature_adaptation = variabilities[0], values[0]
-        self.O2_adaptation = variabilities[1], values[1]
-        self.nutrition_adaptation = variabilities[2], values[2]
-
-
-class Phenotype:
-    def __init__(self, values, variabilities):
-        self.temperature_adaptation = variabilities[0], values[0]
-        self.O2_adaptation = variabilities[1], values[1]
-        self.nutrition_adaptation = variabilities[2], values[2]
-
-
-def growth_rate(genes, conditions):
-    genotype, phenotype = genes
-    rate = 1 / (
-        1
-        + np.sqrt(
-            dict_coeff["temperature"]
-            * (genotype.temperature_adaptation[1] - conditions[0]) ** 2
-            + dict_coeff["O2"] * (genotype.O2_adaptation[1] - conditions[1]) ** 2
-            + dict_coeff["nutrition"]
-            * (genotype.nutrition_adaptation[1] - conditions[2]) ** 2
-        )
+def growth_rate(genes, adaptation, condition):
+    if adaptation is None:
+        return 0.8 * 10 / (10 + DISTANT_COEFF * (np.abs(genes - condition)))
+    return 0.8 * max(
+        10 / (10 + DISTANT_COEFF * (np.abs(genes - condition))),
+        10 / (10 + DISTANT_COEFF * (np.abs(adaptation - condition))),
     )
-    if phenotype is None:
-        return rate
-    else:
-        return min(
-            rate,
-            1
-            / (
-                1
-                + np.sqrt(
-                    dict_coeff["temperature"]
-                    * (phenotype.temperature_adaptation[1] - conditions[0]) ** 2
-                    + dict_coeff["O2"]
-                    * (phenotype.O2_adaptation[1] - conditions[1]) ** 2
-                    + dict_coeff["nutrition"]
-                    * (phenotype.nutrition_adaptation[1] - conditions[2]) ** 2
-                )
-            ),
-        )
-
-
-dict_genes = {"variability": 1, "phenotype": 2, "genotype": 3}
 
 
 class EvolutiveCells1D:
     def __init__(self, first_evolution: Optional[int] = None, conditions=0):
 
-        self.genes = [first_evolution, None]
-        self.growth_rate = growth_rate(self.genes, conditions)
+        self.short_evolution = (
+            None  # the first element is the adaptation, the second is the duration
+        )
+        self.long_evolution = first_evolution
+        self.growth_rate = growth_rate(first_evolution, None, conditions)
         self.generation = 0
 
+    def update_cell(
+        self,
+        conditions,
+        probability_to_evolve: float = 0.1,
+        distance_mult: float = 1.1,
+        probability_to_adapt: float = 0.1,
+    ) -> tuple[int, int]:
+        best_distance = abs(self.long_evolution - conditions)
+        new_evolution = -1
+        new_adaptation = -1
+        if self.short_evolution != []:
+            best_adaptation = min(
+                self.short_evolution, key=lambda x: abs(x[0] - conditions)
+            )
+            best_distance = min(best_distance, abs(best_adaptation[0] - conditions))
+        self.growth_rate = growth_rate(best_distance, self.long_evolution, conditions)
+        for evolution in self.short_evolution:
+            if evolution[1] == 0:
+                self.short_evolution.remove(evolution)
+            else:
+                evolution[1] -= 1
+
+            distance = abs(evolution[0] - self.long_evolution)
+            if np.random.uniform(0, 1) < probability_to_evolve / (
+                distance_mult**distance
+            ):
+                self.long_evolution = evolution[0]
+                new_evolution = evolution[0]
+
+        if (
+            np.random.uniform(0, 1) < probability_to_adapt
+            and self.long_evolution != conditions
+        ):
+            if self.long_evolution < conditions:
+                new_adaptation = np.random.randint(self.long_evolution, conditions + 1)
+                self.short_evolution.append([new_adaptation, 5])
+            else:
+                new_adaptation = np.random.randint(conditions, self.long_evolution + 1)
+                self.short_evolution.append([new_adaptation, 5])
+        return new_evolution, new_adaptation
+
     def copy(self, conditions):
-        new_cell = EvolutiveCells1D(self.type, conditions)
-        new_cell.genes = self.genes.copy()
+        new_cell = EvolutiveCells1D( conditions)
+        new_cell.short_evolution = self.short_evolution
+        new_cell.long_evolution = self.long_evolution
         new_cell.generation = self.generation + 1
         return new_cell
 
@@ -174,7 +179,6 @@ def gillespie_algorithm(
 
             if change_probabilities[0] < evol_probability_without_adaptation:
                 new_evolution = np.random.normal(new_cell.long_evolution, 0.05)
-                current_evolutions = np.append(current_evolutions, new_evolution)
                 n_evol += 1
                 n_evol_wa += 1
 
@@ -192,6 +196,7 @@ def gillespie_algorithm(
                 and new_cell.short_evolution is not None
             ):
                 new_evolution = np.random.normal(new_cell.short_evolution, 0.05)
+                new_cell.long_evolution = new_evolution
                 current_evolutions = np.append(current_evolutions, new_evolution)
                 n_evol += 1
 

@@ -6,6 +6,15 @@ import cProfile
 import time
 
 np.random.seed(0)
+
+"""
+In this simulation, we consider a population of cells that can evolve and adapt to their environment.
+The cells are characterized by their type, their evolution and their epigenetic adaptation.
+The growth rate of a cell is determined by the distance between its evolution and the conditions of the environment.
+An evolution is a long-term change in the cell's growth rate, while an adaptation is a short-term change.
+"""
+
+
 N = 250
 probabilities = [0.1, 0.001, 0.00005] # evolution, adaptation, evolution without adaptation
 first_evolution = [7]
@@ -22,6 +31,19 @@ def inherent_growth_rate_function(condition):
 
 DISTANT_COEFF = 1
 CST_VALUE = 0.05
+
+"""
+    Define the disistribution of the next time step and the growth rate function based on
+    the distance between the current evolution and the conditions
+"""
+
+def compute_next_time_step(n: int, base_growth_rate: float, type:str, variance:float = 0.05) -> float:
+    if type == "lognormal":
+        sigma = np.sqrt(np.log(1 + variance / (base_growth_rate * base_growth_rate)))
+        mu = np.log(base_growth_rate) - sigma ** 2 / 2
+        return np.random.lognormal(mu , sigma)
+    if type == "exponential":
+        return np.random.exponential(1 / (n * base_growth_rate))
 
 
 def growth_rate_function(best_gene_distance, evolutions, condition):
@@ -90,7 +112,7 @@ class EvolutiveCells1D:
            
             if np.random.uniform(0, 1) < probability_to_evolve :
                 self.evolution = self.epigenetic + np.random.normal(0, std)
-                new_evolution = self.epigenetic
+                new_evolution = self.evolution
 
             if np.random.uniform(0, 1) < adaptation_loss_probability:
                 self.epigenetic = None
@@ -292,14 +314,15 @@ def Moran_process(
     current_time = 0
     timesteps = [0]
     n_timesteps = 1
+    division_times = []
     for conditions, change_time in conditions_profile:
         sample.change_conditions(conditions)
         while current_time < change_time:
-            next_time = np.random.exponential(1 / sample.total_growth_rate)
+            next_time = compute_next_time_step(sample.n, sample.get_cumulative_growth_rate_function(), "lognormal") / sample.n
             current_time += next_time
             birth_rate = np.random.uniform(0, sample.get_cumulative_growth_rate_function())
             birth_index = np.searchsorted(sample.cumulative_growth_rates, birth_rate)
-
+            division_times.append(next_time)
             death_index = np.random.randint(sample.n)
             sample.update(
                 birth_index,
@@ -331,7 +354,8 @@ def Moran_process(
         growth_rates,
         sample.list_evolutions,
         absolute_generation,
-        generation_since_last_evolution
+        generation_since_last_evolution,
+        division_times
     )
 
 
@@ -365,7 +389,8 @@ def main(
                 mean_growth_rates,
                 list_evolution,
                 absolute_generation,
-                generation_since_last_evolution
+                generation_since_last_evolution,
+                division_times  
             ) = Moran_process(
                 sample,
                 conditions_profile,
@@ -379,6 +404,10 @@ def main(
                 proportions_type,
                 growth_rate_by_type,
                 mean_growth_rates,
+                list_evolution,
+                absolute_generation,
+                generation_since_last_evolution,
+                division_times
             ) = Moran_process(sample, conditions_profile)
 
         print(f"Time elapsed: {time.time()-start} \n")
@@ -418,6 +447,13 @@ def main(
         plt.xlabel("Time")
         plt.ylabel("Mean generation since last evolution")
         plt.title("Mean generation since last evolution")
+
+        plt.figure()
+        plt.hist(division_times, bins=150)
+        plt.xlabel("Time")
+        plt.ylabel("Number of divisions")
+        plt.title("Division times")
+
 
         plt.show()
         (

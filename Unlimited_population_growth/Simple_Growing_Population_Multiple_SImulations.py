@@ -7,14 +7,14 @@ import time
 import cProfile
 
 MAX_POPULATION = 1000
-N_SIMULATIONS = 15
+N_SIMULATIONS = 5
 MAX_NAME = 1
 
 # Initialize parameters
 
 np.random.seed(0)
-initial_population = 1000
-total_time = 20000
+initial_population = 100
+total_time = 200
 death_rate = 0.01
 initial_growth_rate = 0.01
 std_growth_rate = 0.00005
