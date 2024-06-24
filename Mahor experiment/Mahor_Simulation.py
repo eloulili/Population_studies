@@ -2,6 +2,7 @@
 from typing import Optional
 import numpy as np
 import matplotlib.pyplot as plt
+from pstats import Stats
 import cProfile
 import time
 import statistics
@@ -191,7 +192,7 @@ def Gillespie_function(
             division_time.append(next_time * sample.n)
             
             #Chose randomly a cell to reproduce
-            birth_index = np.random.choice(range(sample.n))
+            birth_index = np.random.randint(sample.n)
 
 
             sample.update(
@@ -460,6 +461,10 @@ def main_lior(
 
     return (expected_ratio_v2 - 1.96*std_ratio<= effective_ratio  and effective_ratio <= expected_ratio_v2 + 1.96*std_ratio,expected_ratio - 1.96*std_ratio<= effective_ratio  and effective_ratio <= expected_ratio + 1.96*std_ratio, effective_ratio, 
             expected_ratio, expected_ratio_v2, std_ratio, total_variance, CV_2, total_entropy, np.mean(entropy_per_simulation), total_entropy/np.mean(entropy_per_simulation))
+
+
+
+
 
 n_in_range = 0
 n_in_range_v2 = 0
