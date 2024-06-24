@@ -9,7 +9,7 @@ np.random.seed(0)
 
 """
 In this simulation, we consider a population of cells that can evolve and adapt to their environment.
-The cells are characterized by their type, their evolution and their epigenetic adaptation.
+The cells are characterized by their type, their evolution and their phenotype adaptation.
 The growth rate of a cell is determined by the distance between its evolution and the conditions of the environment.
 An evolution is a long-term change in the cell's growth rate, while an adaptation is a short-term change.
 """
@@ -77,7 +77,7 @@ class EvolutiveCells1D:
     def __init__(self, type: int,first_evolution: Optional[int] = None, conditions=0, growth_rate_error=0.,  growth_rate: Optional[float] = None):
 
         self.type = type
-        self.epigenetic = None
+        self.phenotype = None
         self.evolution = first_evolution
         if growth_rate is None:
             self.growth_rate = growth_rate_function(
@@ -108,14 +108,14 @@ class EvolutiveCells1D:
     ) -> tuple[float, float]:
         new_evolution = -1
         new_adaptation = -1
-        if self.epigenetic is not None:
+        if self.phenotype is not None:
            
             if np.random.uniform(0, 1) < probability_to_evolve :
-                self.evolution = self.epigenetic + np.random.normal(0, std)
+                self.evolution = self.phenotype + np.random.normal(0, std)
                 new_evolution = self.evolution
 
             if np.random.uniform(0, 1) < adaptation_loss_probability:
-                self.epigenetic = None
+                self.phenotype = None
 
 
         if (
@@ -123,13 +123,13 @@ class EvolutiveCells1D:
             and self.evolution != conditions
         ):
                 new_adaptation = np.random.normal(self.evolution, std)
-                self.epigenetic = new_adaptation
+                self.phenotype = new_adaptation
         if np.random.uniform(0, 1) < probability_to_evolve_without_adapt:
             self.evolution = self.evolution + np.random.normal(0, std)
             new_evolution = self.evolution
         best_distance = abs(self.evolution - conditions)
-        if self.epigenetic is not None:
-            best_distance = min(best_distance, abs(self.epigenetic - conditions))
+        if self.phenotype is not None:
+            best_distance = min(best_distance, abs(self.phenotype - conditions))
         self.growth_rate = growth_rate_function(best_distance, self.evolution, conditions) + self.gr_error
 
         return new_evolution, new_adaptation
@@ -137,13 +137,13 @@ class EvolutiveCells1D:
     def copy(self, conditions):
         additive_error = np.random.normal(0, growth_rate_error)
         new_cell = EvolutiveCells1D(self.type, conditions=conditions, first_evolution=self.evolution, growth_rate=self.growth_rate - self.gr_error, growth_rate_error=additive_error + self.gr_error)
-        new_cell.epigenetic = self.epigenetic
+        new_cell.phenotype = self.phenotype
         new_cell.absolute_generation = self.absolute_generation +1
         new_cell.generation_since_last_evolution = self.generation_since_last_evolution +1
         return new_cell
 
     def __str__(self):
-        return f"Cell of type {self.type} has adaptation {self.epigenetic} and long evolution {self.evolution}"
+        return f"Cell of type {self.type} has adaptation {self.phenotype} and long evolution {self.evolution}"
 
 
 class EvolutiveSample1D:
@@ -179,9 +179,9 @@ class EvolutiveSample1D:
         self.conditions = conditions
         for cell in self.cells:
             best_distance = abs(cell.evolution - conditions)
-            if cell.epigenetic is not None:
+            if cell.phenotype is not None:
 
-                best_distance = min(best_distance, abs(cell.epigenetic - conditions))
+                best_distance = min(best_distance, abs(cell.phenotype - conditions))
             cell.growth_rate = growth_rate_function(
                 best_distance, cell.evolution, conditions
             ) + cell.gr_error

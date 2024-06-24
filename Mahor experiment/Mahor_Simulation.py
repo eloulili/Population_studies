@@ -22,7 +22,7 @@ n_iter = 1  # Number of iterations
 
 MULTIPLICATIVE = False
 SQUARE_ROOT = False
-PEAKS = np.array([[0],[1.5]])
+PEAKS = None
 CHANGE_PEAK_PROBABILITY = 0.03
 
 def compute_next_time_step(n: int, base_growth_rate: float, type:str, variance:float = 0.05) -> float:
@@ -33,23 +33,23 @@ def compute_next_time_step(n: int, base_growth_rate: float, type:str, variance:f
     if type == "exponential":
         return np.random.exponential(1 / (n * base_growth_rate))
 
-def compute_new_epigenetic( mother_cell, stds: list[float], probability_to_adapt: float) -> list[float]:   
+def compute_new_phenotype( mother_cell, stds: list[float], probability_to_adapt: float) -> list[float]:   
     """
-    Compute the new epigenetic state of a cell based on its mother cell's epigenetic state and the standard deviations for each trait.
-    If the distribution of traits is multimodal, the new epigenetic state may be chosen from a set of peaks.
+    Compute the new phenotype state of a cell based on its mother cell's phenotype state and the standard deviations for each trait.
+    If the distribution of traits is multimodal, the new phenotype state may be chosen from a set of peaks.
     Feel free to modify this function to include additional logic or constraints as needed.
     """
-    new_epigenetic = mother_cell.epigenetic.copy()
+    new_phenotype = mother_cell.phenotype.copy()
     new_peak = mother_cell.associated_peak.copy()
     if np.random.uniform() < probability_to_adapt:
-                    new_epigenetic =  mother_cell.epigenetic.copy()
-                    new_epigenetic = list(np.random.normal(mother_cell.epigenetic, stds))
+                    new_phenotype =  mother_cell.phenotype.copy()
+                    new_phenotype = list(np.random.normal(mother_cell.phenotype, stds))
     if PEAKS is not None:
                 if np.random.uniform() < CHANGE_PEAK_PROBABILITY:
                     new_peak = PEAKS[np.random.randint(0, len(PEAKS))]
-                    new_epigenetic =  new_peak
-                    new_epigenetic = list(np.random.normal(new_peak, stds))     
-    return new_epigenetic, new_peak                     
+                    new_phenotype =  new_peak
+                    new_phenotype = list(np.random.normal(new_peak, stds))     
+    return new_phenotype, new_peak                     
     
             
 
@@ -72,11 +72,11 @@ def smooth_data(data, timesteps, smooth_coefficient: int):
 
 class EvolutiveCell:
     """Class to represent an evolutionary cell with specific characteristics and behaviors."""
-    def __init__(self, type: int, epigenetic: list[float]):
+    def __init__(self, type: int, phenotype: list[float]):
         self.type = type
-        self.epigenetic = epigenetic
+        self.phenotype = phenotype
         self.absolute_generation = 0
-        self.previous_epigenetic = [self.epigenetic]
+        self.previous_phenotype = [self.phenotype]
         self.associated_peak = None
         self.growth_rate = 0.5
 
@@ -88,15 +88,15 @@ class EvolutiveCell:
     def reproduce(self, probability_to_adapt: float = 0.1,
         stds = list[float]):
 
-        assert len(stds) == len(self.epigenetic)
-        new_cell = EvolutiveCell(self.type, epigenetic=self.epigenetic)
+        assert len(stds) == len(self.phenotype)
+        new_cell = EvolutiveCell(self.type, phenotype=self.phenotype)
         new_cell.absolute_generation = self.absolute_generation +1
-        new_cell.previous_epigenetic = self.previous_epigenetic.copy()
-        new_epigenetic, new_peak = compute_new_epigenetic(self, stds, probability_to_adapt)
-        new_cell.epigenetic = new_epigenetic
+        new_cell.previous_phenotype = self.previous_phenotype.copy()
+        new_phenotype, new_peak = compute_new_phenotype(self, stds, probability_to_adapt)
+        new_cell.phenotype = new_phenotype
         new_cell.associated_peak = new_peak
-        if new_epigenetic != self.epigenetic:
-            new_cell.previous_epigenetic.append(new_epigenetic)
+        if new_phenotype != self.phenotype:
+            new_cell.previous_phenotype.append(new_phenotype)
         return new_cell
         
 
@@ -108,14 +108,14 @@ class EvolutiveSample:
         self.n = len(cells)
         self.cumulative_growth_rates = [] 
 
-        self.list_evolutions = [cell.epigenetic for cell in self.cells if cell.epigenetic is not None]  
+        self.list_evolutions = [cell.phenotype for cell in self.cells if cell.phenotype is not None]  
 
         # Variables used for tracking and analysis
         self.sum_absolute_generation = 0
-        self.sum_evolution = cells[0].epigenetic.copy()
+        self.sum_evolution = cells[0].phenotype.copy()
         for i in  range(1, len(cells)):
-            for j in range(len(cells[i].epigenetic)):
-                self.sum_evolution[j] += cells[i].epigenetic[j]
+            for j in range(len(cells[i].phenotype)):
+                self.sum_evolution[j] += cells[i].phenotype[j]
         
         self.genetic_tree = []
 
@@ -136,9 +136,9 @@ class EvolutiveSample:
         # Update the sample by adding a new cell based on the birth index and adaptation probability.
         new_cell = self.cells[birth_index].reproduce(adaptation_probability, stds)
 
-        evol_new_cell = new_cell.epigenetic 
+        evol_new_cell = new_cell.phenotype 
         
-        self.genetic_tree.append(new_cell.previous_epigenetic + [new_cell.epigenetic])
+        self.genetic_tree.append(new_cell.previous_phenotype + [new_cell.phenotype])
 
         self.sum_absolute_generation += new_cell.absolute_generation
 
@@ -180,7 +180,7 @@ def Gillespie_function(
 
     quantity_type = [sample.quantity_per_type.copy()]
     absolute_generation = [sample.sum_absolute_generation/sample.n]
-    mean_epigenetic = [[sample.sum_evolution[i]/sample.n for i in range(len(sample.sum_evolution))]]
+    mean_phenotype = [[sample.sum_evolution[i]/sample.n for i in range(len(sample.sum_evolution))]]
     current_time = 0
     timesteps = [0]
     n_timesteps = 1
@@ -204,7 +204,7 @@ def Gillespie_function(
             timesteps.append(current_time)
             absolute_generation.append(sample.sum_absolute_generation/sample.n)
             quantity_type.append(sample.quantity_per_type.copy())
-            mean_epigenetic.append([sample.sum_evolution[i]/sample.n for i in range(len(sample.sum_evolution))])
+            mean_phenotype.append([sample.sum_evolution[i]/sample.n for i in range(len(sample.sum_evolution))])
 
             n_timesteps += 1  
 
@@ -217,12 +217,12 @@ def Gillespie_function(
                 break
             transpose_quantity_type[j].append(quantity_type[i][j])
     """
-    mean_epigenetic = np.array(mean_epigenetic).T
+    mean_phenotype = np.array(mean_phenotype).T
 
     return (
         timesteps,
         transpose_quantity_type,
-        mean_epigenetic,
+        mean_phenotype,
         absolute_generation,
         division_time,
     )
@@ -241,7 +241,7 @@ def main(
     # the population of cells in all chambers, when the original cell is the same for all chambers.
     np.random.seed(0)
     cells = []
-    cells = [EvolutiveCell( 0, epigenetic=first_evolution[i]) for i in range(len(first_evolution))]
+    cells = [EvolutiveCell( 0, phenotype=first_evolution[i]) for i in range(len(first_evolution))]
     list_evolutions = []
     variance_deviation_per_simulation = []
     start = time.time()
@@ -249,7 +249,7 @@ def main(
         # Initialization, control the seed for reproducibility
         np.random.seed(k)
         cells = []
-        cells = [EvolutiveCell( 0, epigenetic=first_evolution[i]) for i in range(len(first_evolution))]
+        cells = [EvolutiveCell( 0, phenotype=first_evolution[i]) for i in range(len(first_evolution))]
 
 
         sample = EvolutiveSample(
@@ -259,7 +259,7 @@ def main(
         
         (timesteps,
         quantity_type,
-        mean_epigenetic,
+        mean_phenotype,
         absolute_generation,
         division_time,
             ) = Gillespie_function(
@@ -286,10 +286,10 @@ def main(
 
 
         plt.figure()
-        plt.plot(timesteps, mean_epigenetic[0], label="Mean epigenetic")
+        plt.plot(timesteps, mean_phenotype[0], label="Mean phenotype")
         plt.xlabel("Time")
-        plt.ylabel("Mean epigenetic")
-        plt.title("Mean epigenetic")
+        plt.ylabel("Mean phenotype")
+        plt.title("Mean phenotype")
         plt.legend()
 
 
@@ -307,7 +307,7 @@ def main(
         (       timesteps,
                 list_evolution,
                 absolute_generation,
-                mean_epigenetic,
+                mean_phenotype,
                 sample,
                 total_genetic_tree,
                 division_time,
@@ -382,7 +382,7 @@ def main_lior(
     # First growth
     (timesteps,
         quantity_type,
-        mean_epigenetic,
+        mean_phenotype,
         absolute_generation,
         divisions_time,
             ) = Gillespie_function(
@@ -403,7 +403,7 @@ def main_lior(
         new_sample = EvolutiveSample(cells = [original_cell], nb_types = 1)
         (timesteps, 
         quantity_type,
-        mean_epigenetic, 
+        mean_phenotype, 
         absolute_generation, 
         divisions_time) = Gillespie_function(new_sample, adaptation_probability= adaptation_probability, base_growth_rate= base_growth_rate, stds = stds, max_population_size = max_population_size)
          
@@ -451,7 +451,7 @@ def main_lior(
     print(f"Mean entropy: {np.mean(entropy_per_simulation)}")
     print(f"Total entropy: {total_entropy}")
     print(f"Ratio entropy: {total_entropy/np.mean(entropy_per_simulation)}")
-    if np.random.uniform() < 0.2: 
+    if np.random.uniform() < 0.: 
         # Plot the distribution of the population sometimes
         plt.hist(total_populations, bins=100)
         plt.show()
@@ -473,7 +473,7 @@ sum_ratio_entropy = 0
 sum_cv = 0  
 sum_total_variance = 0
 sum_total_entropy = 0
-for seed in range(50):
+for seed in range(100):
     is_in_range_v2,is_in_range, effective_ratio, expected_ratio, expected_ratio_v2, std, total_variance, cv_2, total_entropy, mean_entropy, ratio_entropy = main_lior(adaptation_probability= .8, base_growth_rate=base_growth_rate, stds = [0.15], n_1=17, dillution_1= 250, n_2=9, dillution_2=256, seed=seed, verbose=False) 
     print(seed)
     sum_ratio += effective_ratio
@@ -487,12 +487,12 @@ for seed in range(50):
     if is_in_range_v2:
         n_in_range_v2 += 1
 print(f"Number of simulations in range: {n_in_range}")
-print(f"Percentage of simulations in range: {100 * n_in_range/50}%")
+print(f"Percentage of simulations in range: {100 * n_in_range/100}%")
 print(f"Number of simulations in range v2: {n_in_range_v2}")
-print(f"Percentage of simulations in range v2: {100 * n_in_range_v2/50} %")
-print(f"Mean effective ratio: {sum_ratio/50}")
-print(f"Mean cv: {sum_cv/50}")
-print(f"Mean total variance: {sum_total_variance/50}\n")
-print(f"Mean total entropy: {sum_total_entropy/50}")
-print(f"Mean ratio entropy: {sum_ratio_entropy/50}")
+print(f"Percentage of simulations in range v2: {100 * n_in_range_v2/100} %")
+print(f"Mean effective ratio: {sum_ratio/100}")
+print(f"Mean cv: {sum_cv/100}")
+print(f"Mean total variance: {sum_total_variance/100}\n")
+print(f"Mean total entropy: {sum_total_entropy/100}")
+print(f"Mean ratio entropy: {sum_ratio_entropy/100}")
 
