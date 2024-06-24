@@ -69,7 +69,7 @@ class EvolutiveCells1D:
         return new_evolution, new_adaptation
 
     def copy(self, conditions):
-        new_cell = EvolutiveCells1D( conditions)
+        new_cell = EvolutiveCells1D(conditions)
         new_cell.short_evolution = self.short_evolution
         new_cell.long_evolution = self.long_evolution
         new_cell.generation = self.generation + 1

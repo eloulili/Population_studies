@@ -73,7 +73,10 @@ class Cell:
 
     def reproduce(self, std_growth_rate=5e-4, variation_rate=0.1):
         new_growth_rate = max(
-            self.growth_rate + np.random.normal(0, std_growth_rate) * np.random.binomial(1,variation_rate), 0
+            self.growth_rate
+            + np.random.normal(0, std_growth_rate)
+            * np.random.binomial(1, variation_rate),
+            0,
         )
         new_cell = Cell(new_growth_rate, self.name)
         new_cell.generation = self.generation + 1
@@ -98,7 +101,7 @@ def gillespie_algorithm(
     variation_rate=0.1,
     death_rate=0.5,
     get_proportions=False,
-    chemostat = (-1,-1)
+    chemostat=(-1, -1),
 ):
     current_population = len(initial_cells)
     populations = np.array([current_population])
@@ -136,7 +139,6 @@ def gillespie_algorithm(
         next_chemostat_time = chemostat_time
         use_chemostat = True
 
-
     if get_proportions:
         proportions_per_name = [get_proportion_per_name(cell_batch)]
 
@@ -148,12 +150,18 @@ def gillespie_algorithm(
             print(f"New Stop time: {time}")
 
             break
-        
+
         if use_chemostat and time > next_chemostat_time:
             n_removed = int(chemostat_rate * current_population)
             if n_removed > 0:
-                removed_indexes = np.random.choice(current_population, n_removed, replace=False)
-                cell_batch = [cell_batch[i] for i in range(current_population) if i not in removed_indexes]
+                removed_indexes = np.random.choice(
+                    current_population, n_removed, replace=False
+                )
+                cell_batch = [
+                    cell_batch[i]
+                    for i in range(current_population)
+                    if i not in removed_indexes
+                ]
                 current_population -= n_removed
                 current_rates = np.array([cell.growth_rate for cell in cell_batch])
                 sum_rates = np.sum(current_rates)
@@ -211,7 +219,9 @@ def gillespie_algorithm(
             current_population += 1
             probabilities = current_rates / sum_rates
             new_cell_index = np.random.choice(len(current_rates), p=probabilities)
-            new_cell = cell_batch[new_cell_index].reproduce(std_growth_rate, variation_rate)
+            new_cell = cell_batch[new_cell_index].reproduce(
+                std_growth_rate, variation_rate
+            )
             cell_batch.append(new_cell)
             n_born += 1
             populations = np.append(populations, current_population)
@@ -262,7 +272,7 @@ def run_gillespie_simulations(
     std_growth_rate,
     variation_rate,
     get_proportion_per_name_list=False,
-    chemostat = (-1,-1)
+    chemostat=(-1, -1),
 ):
     initial_cells = [
         [Cell(initial_growth_rate, i % MAX_NAME) for i in range(initial_population)]
@@ -283,7 +293,7 @@ def run_gillespie_simulations(
                 std_growth_rate=std_growth_rate,
                 variation_rate=variation_rate,
                 get_proportions=get_proportion_per_name_list,
-                chemostat = chemostat
+                chemostat=chemostat,
             )
         )
         stop_time = min(stop_time, simulation_results[-1][-1])
@@ -300,7 +310,7 @@ def run_multiple_gillespie_simulations(
     std_growth_rate_list,
     variation_rate,
     get_proportion_per_name_list=False,
-    chemostat = (-1,-1)
+    chemostat=(-1, -1),
 ):
     all_simulation_results = []
     stop_time = total_time
@@ -319,7 +329,7 @@ def run_multiple_gillespie_simulations(
             std_growth_rate,
             variation_rate,
             get_proportion_per_name_list,
-            chemostat = chemostat
+            chemostat=chemostat,
         )
         all_simulation_results.append((simulation_results, std_growth_rate))
     return all_simulation_results, stop_time
@@ -343,7 +353,7 @@ all_simulation_results, stop_time = run_multiple_gillespie_simulations(
     std_growth_rate_list,
     variation_rate,
     get_proportion_per_name_list,
-    chemostat = chemostat
+    chemostat=chemostat,
 )
 stop = time.time()
 

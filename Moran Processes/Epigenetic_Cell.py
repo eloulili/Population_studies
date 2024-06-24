@@ -19,18 +19,24 @@ It is possible for a cell to fixate its phenotype value, meaning it will never g
 
 # Define constants and simulation parameters.
 N = 500
-probabilities = [0.1, 0.3, 0.0005]  # probabilities for evolution and loss of adaptation, and fixation
+probabilities = [
+    0.1,
+    0.3,
+    0.0005,
+]  # probabilities for evolution and loss of adaptation, and fixation
 first_evolution = [0]  # Initial evolution state
 numbers = [500]  # Number of entities
-conditions_profile = [(0,100)]  # Environmental conditions profile
+conditions_profile = [(0, 100)]  # Environmental conditions profile
 
 # Constants for calculations within the growth rate functions.
 DISTANT_COEFF = 1
 CST_VALUE = 0.5
-neutral_coefficient = np.exp(-CST_VALUE)  # Coefficient for adjusting growth based on a constant value.
+neutral_coefficient = np.exp(
+    -CST_VALUE
+)  # Coefficient for adjusting growth based on a constant value.
 
 smooth_coefficient = 600  # Coefficient for data smoothing operations.
-std = 1 # Standard deviation for normal distribution used in simulations.
+std = 1  # Standard deviation for normal distribution used in simulations.
 
 COND_COEF = 10  # Coefficient for condition-related calculations.
 growth_rate_error = 0.0001  # Error term in growth rate calculations.
@@ -46,39 +52,61 @@ def smooth_data(data, timesteps, smooth_coefficient: int):
     steps = [timesteps[i] - timesteps[i - 1] for i in range(1, len(data))]
     total_time = sum(steps[:smooth_coefficient])
     normalized_mean_data = sum([steps[i] * data[i] for i in range(smooth_coefficient)])
-    for i in range(smooth_coefficient, len(data)):    
-        smoothed_data[i-smooth_coefficient] = normalized_mean_data / total_time
-        total_time += steps[i-1] - steps[i - smooth_coefficient -1]
-        normalized_mean_data = normalized_mean_data - data[i - smooth_coefficient] * steps[i - smooth_coefficient-1] + data[i] * steps[i-1]
+    for i in range(smooth_coefficient, len(data)):
+        smoothed_data[i - smooth_coefficient] = normalized_mean_data / total_time
+        total_time += steps[i - 1] - steps[i - smooth_coefficient - 1]
+        normalized_mean_data = (
+            normalized_mean_data
+            - data[i - smooth_coefficient] * steps[i - smooth_coefficient - 1]
+            + data[i] * steps[i - 1]
+        )
     return smoothed_data
+
 
 def growth_rate_function(best_gene_distance, phenotype, condition):
     """Calculate growth rate based on gene distance, phenotype factors, and environmental conditions."""
     if phenotype is None:
         return CST_VALUE
-    return CST_VALUE + np.log(max(neutral_coefficient, 1 + DISTANT_COEFF * phenotype)) / 20
+    return (
+        CST_VALUE + np.log(max(neutral_coefficient, 1 + DISTANT_COEFF * phenotype)) / 20
+    )
 
 
-def compute_next_time_step(n: int, total_growth_rate: float, type:str, std:float = 0.01) -> float:
-    mean_time = 1/total_growth_rate
+def compute_next_time_step(
+    n: int, total_growth_rate: float, type: str, std: float = 0.01
+) -> float:
+    mean_time = 1 / total_growth_rate
     local_std = std / np.sqrt(n)
     if type == "lognormal":
-        sigma = np.sqrt(np.log(1 + local_std**2 / mean_time ** 2))
-        mu = np.log(mean_time) - sigma ** 2 / 2  
-        return np.random.lognormal(mean=mu , sigma=sigma)
+        sigma = np.sqrt(np.log(1 + local_std**2 / mean_time**2))
+        mu = np.log(mean_time) - sigma**2 / 2
+        return np.random.lognormal(mean=mu, sigma=sigma)
     if type == "exponential":
         return np.random.exponential(mean_time)
-        
+
 
 class EvolutiveCells1D:
     """Class to represent an evolutionary cell with specific characteristics and behaviors."""
-    def __init__(self, type: int, phenotype: Optional[float] = None, conditions=0, growth_rate_error=0.,  growth_rate: Optional[float] = None):
+
+    def __init__(
+        self,
+        type: int,
+        phenotype: Optional[float] = None,
+        conditions=0,
+        growth_rate_error=0.0,
+        growth_rate: Optional[float] = None,
+    ):
         self.type = type
         self.phenotype = phenotype
         if growth_rate is None and phenotype is not None:
-            self.growth_rate = growth_rate_function(abs(phenotype - conditions), self.phenotype, conditions) + growth_rate_error
+            self.growth_rate = (
+                growth_rate_function(
+                    abs(phenotype - conditions), self.phenotype, conditions
+                )
+                + growth_rate_error
+            )
         elif growth_rate is None:
-            self.growth_rate = CST_VALUE + growth_rate_error        
+            self.growth_rate = CST_VALUE + growth_rate_error
         else:
             self.growth_rate = growth_rate + growth_rate_error
         self.gr_error = growth_rate_error
@@ -90,8 +118,8 @@ class EvolutiveCells1D:
 
     # Methods for updating cell state, copying the cell, and converting cell information to a string are omitted for brevity.
 
-# More classes and functions such as EvolutiveSample1D, Moran_process, and main are defined here.
-# These functions handle simulation setup, execution, and data analysis, including adapting to new conditions, updating cell states, and visualizing results.
+    # More classes and functions such as EvolutiveSample1D, Moran_process, and main are defined here.
+    # These functions handle simulation setup, execution, and data analysis, including adapting to new conditions, updating cell states, and visualizing results.
 
     def update_cell(
         self,
@@ -99,49 +127,56 @@ class EvolutiveCells1D:
         probability_to_adapt: float = 0.1,
         adaptation_loss_probability: float = 0.5,
         fix_probability: float = 0.0001,
-        std: float = 0.1, # Standard deviation of an evolution step
+        std: float = 0.1,  # Standard deviation of an evolution step
         quick_growth_rates: dict = {},
-        max_type: int = 1
+        max_type: int = 1,
     ) -> tuple[bool, bool]:
         """Update cell based on environmental conditions and probabilities of adaptation and adaptation loss."""
-        
+
         new_phenotype = None
         has_lost_adaptation = False
         has_fixed = False
         if self.phenotype != self.base_phenotype:
-            if self.phenotype != self.base_phenotype and np.random.uniform(0, 1) < fix_probability:
-                self.base_phenotype = self.phenotype + 0.
-                quick_growth_rates[self.base_phenotype] = growth_rate_function(abs(self.base_phenotype - conditions), self.base_phenotype, conditions)
+            if (
+                self.phenotype != self.base_phenotype
+                and np.random.uniform(0, 1) < fix_probability
+            ):
+                self.base_phenotype = self.phenotype + 0.0
+                quick_growth_rates[self.base_phenotype] = growth_rate_function(
+                    abs(self.base_phenotype - conditions),
+                    self.base_phenotype,
+                    conditions,
+                )
                 self.previous_phenotype = [self.base_phenotype]
                 self.phenotype_generation = 0
                 max_type += 1
                 self.type = max_type
                 has_fixed = True
-            
+
         if self.phenotype != self.base_phenotype:
             if np.random.uniform(0, 1) < adaptation_loss_probability:
-            # If the cell loses adaptation, update the phenotype value and generation count.
+                # If the cell loses adaptation, update the phenotype value and generation count.
                 has_lost_adaptation = True
                 self.phenotype_generation -= 1
-                if self.previous_phenotype :
+                if self.previous_phenotype:
                     # If the cell has previous phenotype values, revert to the last one.
                     self.phenotype = self.previous_phenotype.pop(0)
                 else:
                     self.phenotype = self.base_phenotype
 
-            
-
         if np.random.uniform(0, 1) < probability_to_adapt:
             # If the cell adapts, update the phenotype value and generation count.:
-                if self.phenotype != self.base_phenotype:
-                    self.previous_phenotype.append(self.phenotype)
+            if self.phenotype != self.base_phenotype:
+                self.previous_phenotype.append(self.phenotype)
 
-                new_phenotype = np.random.normal(self.phenotype, std)  # Feel free to change the distribution
-                
-                self.phenotype = new_phenotype
-                self.phenotype_generation += 1
+            new_phenotype = np.random.normal(
+                self.phenotype, std
+            )  # Feel free to change the distribution
+
+            self.phenotype = new_phenotype
+            self.phenotype_generation += 1
         best_distance = None
-        if self.phenotype == self.base_phenotype :
+        if self.phenotype == self.base_phenotype:
             # If the cell has no phenotype value, set the growth rate to a constant value with an error term.
             self.generation_since_last_mutation = 0
             self.growth_rate = quick_growth_rates[self.base_phenotype] + self.gr_error
@@ -149,17 +184,32 @@ class EvolutiveCells1D:
         elif has_lost_adaptation or new_phenotype is not None:
             # If the cell has lost adaptation or adapted, update the growth rate based on the new phenotype value.
             best_distance = abs(self.phenotype - conditions)
-            self.growth_rate = growth_rate_function(best_distance, self.phenotype, conditions) + self.gr_error
+            self.growth_rate = (
+                growth_rate_function(best_distance, self.phenotype, conditions)
+                + self.gr_error
+            )
 
-        # If the cell did not adapt or lose adaptation, the growth rate has already been set in the initialization.      
+        # If the cell did not adapt or lose adaptation, the growth rate has already been set in the initialization.
 
-        return new_phenotype is not None, self.phenotype != self.base_phenotype, has_fixed
+        return (
+            new_phenotype is not None,
+            self.phenotype != self.base_phenotype,
+            has_fixed,
+        )
 
     def copy(self, conditions):
         additive_error = np.random.normal(0, growth_rate_error)
-        new_cell = EvolutiveCells1D(self.type, conditions=conditions, phenotype=self.phenotype, growth_rate=self.growth_rate - self.gr_error, growth_rate_error=additive_error + self.gr_error)
-        new_cell.absolute_generation = self.absolute_generation +1
-        new_cell.generation_since_last_mutation = self.generation_since_last_mutation +1
+        new_cell = EvolutiveCells1D(
+            self.type,
+            conditions=conditions,
+            phenotype=self.phenotype,
+            growth_rate=self.growth_rate - self.gr_error,
+            growth_rate_error=additive_error + self.gr_error,
+        )
+        new_cell.absolute_generation = self.absolute_generation + 1
+        new_cell.generation_since_last_mutation = (
+            self.generation_since_last_mutation + 1
+        )
         new_cell.phenotype_generation = self.phenotype_generation
         new_cell.previous_phenotype = self.previous_phenotype.copy()
         new_cell.base_phenotype = self.base_phenotype
@@ -171,15 +221,18 @@ class EvolutiveSample1D:
     def __init__(self, cells: list[EvolutiveCells1D], nb_types: int, conditions=0):
         self.cells = cells
         self.n = len(cells)
-        self.cumulative_growth_rates = [] 
+        self.cumulative_growth_rates = []
         self.conditions = conditions
-        self.evolution_count  : dict[float,tuple[int,int]] = dict()
+        self.evolution_count: dict[float, tuple[int, int]] = dict()
         for cell in self.cells:
             if cell.phenotype not in self.evolution_count:
                 if cell.phenotype is not None:
-                    self.evolution_count[cell.phenotype] = [(1,0)]
+                    self.evolution_count[cell.phenotype] = [(1, 0)]
             else:
-                self.evolution_count[cell.phenotype][0] = (self.evolution_count[cell.phenotype][0][0] +1 ,0)
+                self.evolution_count[cell.phenotype][0] = (
+                    self.evolution_count[cell.phenotype][0][0] + 1,
+                    0,
+                )
 
         cumul = 0.0
         for i in range(self.n):
@@ -191,29 +244,46 @@ class EvolutiveSample1D:
         self.sum_phenotype_generation = 0
         self.sum_absolute_generation = 0
         self.sum_generation_since_last_evolution = 0
-        self.sum_evolution = sum([cell.phenotype for cell in self.cells if cell.phenotype is not None])
+        self.sum_evolution = sum(
+            [cell.phenotype for cell in self.cells if cell.phenotype is not None]
+        )
 
         self.genetic_tree = []
 
         self.list_evolutions = list(set([cell.phenotype for cell in self.cells]))
         if None in self.list_evolutions:
             self.list_evolutions.remove(None)
-        self.quantity_with_phenotype = [sum([cell.phenotype != cell.base_phenotype for cell in self.cells])]
+        self.quantity_with_phenotype = [
+            sum([cell.phenotype != cell.base_phenotype for cell in self.cells])
+        ]
 
-        self.max_evolution = [max([-1] + [cell.phenotype for cell in self.cells if cell.phenotype is not None])]
+        self.max_evolution = [
+            max(
+                [-1]
+                + [cell.phenotype for cell in self.cells if cell.phenotype is not None]
+            )
+        ]
 
         self.nb_types = nb_types
         self.quantity_per_type = [None for _ in range(nb_types)]
         for type in range(nb_types):
-            self.quantity_per_type[type] = sum([cell.type == type for cell in self.cells]) 
+            self.quantity_per_type[type] = sum(
+                [cell.type == type for cell in self.cells]
+            )
 
         self.growth_rate_per_type = [None for _ in range(nb_types)]
         for type in range(nb_types):
-            self.growth_rate_per_type[type] = sum([cell.growth_rate for cell in self.cells if cell.type == type]) / sum([cell.type == type for cell in self.cells])
+            self.growth_rate_per_type[type] = sum(
+                [cell.growth_rate for cell in self.cells if cell.type == type]
+            ) / sum([cell.type == type for cell in self.cells])
 
         self.quick_growth_rate = dict()
         for cell in self.cells:
-                self.quick_growth_rate[cell.base_phenotype] = growth_rate_function(abs(cell.base_phenotype - self.conditions), cell.base_phenotype, self.conditions)
+            self.quick_growth_rate[cell.base_phenotype] = growth_rate_function(
+                abs(cell.base_phenotype - self.conditions),
+                cell.base_phenotype,
+                self.conditions,
+            )
 
     def change_conditions(self, conditions):
         "Change environmental conditions and update growth rates accordingly."
@@ -223,9 +293,10 @@ class EvolutiveSample1D:
             if cell.phenotype is not None:
 
                 best_distance = abs(cell.phenotype - conditions)
-            cell.growth_rate = growth_rate_function(
-                best_distance, cell.phenotype, conditions
-            ) + cell.gr_error
+            cell.growth_rate = (
+                growth_rate_function(best_distance, cell.phenotype, conditions)
+                + cell.gr_error
+            )
         cumul = 0.0
         for i in range(len(self.cells)):
             cumul += self.cells[i].growth_rate
@@ -233,10 +304,11 @@ class EvolutiveSample1D:
         self.total_growth_rate = cumul
 
         for base_phenotype in self.quick_growth_rate.keys():
-            self.quick_growth_rate[base_phenotype] = growth_rate_function(abs(base_phenotype - self.conditions), base_phenotype, self.conditions)
+            self.quick_growth_rate[base_phenotype] = growth_rate_function(
+                abs(base_phenotype - self.conditions), base_phenotype, self.conditions
+            )
 
-
-    #TODO : The two following functions can be optimized by using a dictionary to store the growth rate by type
+    # TODO : The two following functions can be optimized by using a dictionary to store the growth rate by type
     # instead of computing it each time
     def get_mean_growth_rate_by_type(self):
         growth_rate_by_type = []
@@ -249,7 +321,6 @@ class EvolutiveSample1D:
             else:
                 growth_rate_by_type.append(0)
         return growth_rate_by_type
-
 
     def get_quantity_per_evolution(self, evolution_list):
         return [
@@ -266,7 +337,7 @@ class EvolutiveSample1D:
         adaptation_loss_probability: float = 0.5,
         fixation_probability: float = 0.0001,
     ):
-        
+
         # Update the sample by replacing a cell with a new one based on the birth and death indices, and possible evolution.
         # Update also tracking variables and statistics.
         new_cell = self.cells[birth_index].copy(self.conditions)
@@ -277,37 +348,58 @@ class EvolutiveSample1D:
             fix_probability=fixation_probability,
             std=std,
             quick_growth_rates=self.quick_growth_rate,
-            max_type=self.nb_types
+            max_type=self.nb_types,
         )
         self.max_evolution.append(self.max_evolution[-1])
-        self.cumulative_growth_rates[death_index:] = [self.cumulative_growth_rates[i] + new_cell.growth_rate - self.cells[death_index].growth_rate for i in range(death_index, self.n)]
+        self.cumulative_growth_rates[death_index:] = [
+            self.cumulative_growth_rates[i]
+            + new_cell.growth_rate
+            - self.cells[death_index].growth_rate
+            for i in range(death_index, self.n)
+        ]
         dead_cell = self.cells[death_index]
-        
-        if dead_cell.phenotype == self.max_evolution[-2] and sum([cell.phenotype == self.cells[death_index].phenotype for cell in self.cells]) == 1:
-            self.max_evolution[-1] = max([-1] + [cell.phenotype for cell in self.cells if cell.phenotype is not None and cell.phenotype != self.cells[death_index].phenotype])
-        if dead_cell.phenotype != dead_cell.base_phenotype:   
+
+        if (
+            dead_cell.phenotype == self.max_evolution[-2]
+            and sum(
+                [
+                    cell.phenotype == self.cells[death_index].phenotype
+                    for cell in self.cells
+                ]
+            )
+            == 1
+        ):
+            self.max_evolution[-1] = max(
+                [-1]
+                + [
+                    cell.phenotype
+                    for cell in self.cells
+                    if cell.phenotype is not None
+                    and cell.phenotype != self.cells[death_index].phenotype
+                ]
+            )
+        if dead_cell.phenotype != dead_cell.base_phenotype:
             self.quantity_with_phenotype.append(self.quantity_with_phenotype[-1] - 1)
         else:
             self.quantity_with_phenotype.append(self.quantity_with_phenotype[-1])
-
 
         if has_phenotype:
             self.quantity_with_phenotype[-1] += 1
         else:
             new_cell.generation_since_last_mutation = 0
-        evol_new_cell = new_cell.phenotype 
+        evol_new_cell = new_cell.phenotype
 
-        
         evol_dead_cell = self.cells[death_index].phenotype
 
-
         self.sum_absolute_generation -= self.cells[death_index].absolute_generation
-        self.sum_generation_since_last_evolution -= self.cells[death_index].generation_since_last_mutation
+        self.sum_generation_since_last_evolution -= self.cells[
+            death_index
+        ].generation_since_last_mutation
         self.sum_phenotype_generation -= self.cells[death_index].phenotype_generation
         self.total_growth_rate = self.cumulative_growth_rates[-1]
         if has_new_phenotype:
             self.list_evolutions.append(evol_new_cell)
-            self.evolution_count[evol_new_cell] = [(0,n_timesteps-1)]
+            self.evolution_count[evol_new_cell] = [(0, n_timesteps - 1)]
             new_cell.generation_since_last_mutation = 0
             self.genetic_tree.append(new_cell.previous_phenotype + [new_cell.phenotype])
             if evol_new_cell > self.max_evolution[-2]:
@@ -315,33 +407,45 @@ class EvolutiveSample1D:
 
         self.cells[death_index] = new_cell
         self.sum_absolute_generation += new_cell.absolute_generation
-        self.sum_generation_since_last_evolution += new_cell.generation_since_last_mutation
+        self.sum_generation_since_last_evolution += (
+            new_cell.generation_since_last_mutation
+        )
         self.sum_phenotype_generation += new_cell.phenotype_generation
 
         if has_fixed:
-                self.sum_phenotype_generation = sum([cell.phenotype_generation for cell in self.cells])
-                self.quantity_per_type.append(0)
-                self.growth_rate_per_type.append(0)
-                print("Fixed")
+            self.sum_phenotype_generation = sum(
+                [cell.phenotype_generation for cell in self.cells]
+            )
+            self.quantity_per_type.append(0)
+            self.growth_rate_per_type.append(0)
+            print("Fixed")
 
         if self.nb_types > 1:
             self.quantity_per_type[dead_cell.type] -= 1
             self.quantity_per_type[new_cell.type] += 1
-            self.growth_rate_per_type[new_cell.type] = ((self.quantity_per_type[new_cell.type] -1)* self.growth_rate_per_type[new_cell.type] +  new_cell.growth_rate)/ self.quantity_per_type[new_cell.type]
+            self.growth_rate_per_type[new_cell.type] = (
+                (self.quantity_per_type[new_cell.type] - 1)
+                * self.growth_rate_per_type[new_cell.type]
+                + new_cell.growth_rate
+            ) / self.quantity_per_type[new_cell.type]
             if self.quantity_per_type[dead_cell.type] != 0:
-                    self.growth_rate_per_type[dead_cell.type] = ((self.quantity_per_type[dead_cell.type]  +1)* self.growth_rate_per_type[dead_cell.type]  - dead_cell.growth_rate)/ self.quantity_per_type[dead_cell.type]
+                self.growth_rate_per_type[dead_cell.type] = (
+                    (self.quantity_per_type[dead_cell.type] + 1)
+                    * self.growth_rate_per_type[dead_cell.type]
+                    - dead_cell.growth_rate
+                ) / self.quantity_per_type[dead_cell.type]
             else:
-                    self.growth_rate_per_type[dead_cell.type] = 0
-                    self.nb_types -= 1
+                self.growth_rate_per_type[dead_cell.type] = 0
+                self.nb_types -= 1
 
-        if evol_dead_cell != evol_new_cell :
-            self.evolution_count[evol_dead_cell].append((self.evolution_count[evol_dead_cell][-1][0]-1,n_timesteps))
-            self.evolution_count[evol_new_cell].append((self.evolution_count[evol_new_cell][-1][0]+1,n_timesteps))
+        if evol_dead_cell != evol_new_cell:
+            self.evolution_count[evol_dead_cell].append(
+                (self.evolution_count[evol_dead_cell][-1][0] - 1, n_timesteps)
+            )
+            self.evolution_count[evol_new_cell].append(
+                (self.evolution_count[evol_new_cell][-1][0] + 1, n_timesteps)
+            )
         self.sum_evolution += evol_new_cell - evol_dead_cell
-
-
-        
-
 
     def __str__(self):
         string = ""
@@ -349,25 +453,31 @@ class EvolutiveSample1D:
             string += str(cell) + "\n"
 
         return string
-    
+
     def find_top_evolutions(self, n_top=10):
         """Find the top n_top evolutions based on the highest quantity reached for each evolution."""
         # Initialisation
         best_quantity_per_evolution = {}
 
-        for rank,(evolution, highest_point) in enumerate(self.evolution_count.items()):
+        for rank, (evolution, highest_point) in enumerate(self.evolution_count.items()):
             # Find the highest quantity reached for each evolution
             max_quantity = max(highest_point, key=lambda x: x[0])[0]
-            best_quantity_per_evolution[evolution] = max_quantity , rank
+            best_quantity_per_evolution[evolution] = max_quantity, rank
 
         # Sort the evolutions by the highest quantity reached
-        sorted_evolutions = sorted(best_quantity_per_evolution.items(), key=lambda item: item[1][0], reverse=True)
+        sorted_evolutions = sorted(
+            best_quantity_per_evolution.items(),
+            key=lambda item: item[1][0],
+            reverse=True,
+        )
 
         # Get the top n_top evolutions
-        top_evolutions = [evolution for evolution, quantity in sorted_evolutions[:n_top]]
+        top_evolutions = [
+            evolution for evolution, quantity in sorted_evolutions[:n_top]
+        ]
 
         return top_evolutions
-    
+
     def get_ascendance(self, list_evolution):
         """Get the ascendance of a list of evolutions."""
         tree = []
@@ -377,7 +487,6 @@ class EvolutiveSample1D:
                     tree.append((evolution, tree_evolution))
                     break
         return tree
-
 
 
 def Moran_process(
@@ -393,11 +502,11 @@ def Moran_process(
 
     quantity_type = [sample.quantity_per_type.copy()]
     growth_rate_by_type = [sample.get_mean_growth_rate_by_type()]
-    growth_rates = [sample.total_growth_rate/N]
-    absolute_generation = [sample.sum_absolute_generation/N]
-    generation_since_last_evolution = [sample.sum_generation_since_last_evolution/N]
-    mean_phenotype_generation = [sample.sum_phenotype_generation/N]
-    mean_phenotype = [sample.sum_evolution/N]
+    growth_rates = [sample.total_growth_rate / N]
+    absolute_generation = [sample.sum_absolute_generation / N]
+    generation_since_last_evolution = [sample.sum_generation_since_last_evolution / N]
+    mean_phenotype_generation = [sample.sum_phenotype_generation / N]
+    mean_phenotype = [sample.sum_evolution / N]
     current_time = 0
     timesteps = [0]
     n_timesteps = 1
@@ -408,9 +517,9 @@ def Moran_process(
             next_time = compute_next_time_step(N, sample.total_growth_rate, "lognormal")
             current_time += next_time
             birth_rate = np.random.uniform(0, sample.total_growth_rate)
-            birth_index = np.searchsorted(sample.cumulative_growth_rates, birth_rate) 
-            if next_time < 2 *  1 / CST_VALUE:
-                division_times.append(next_time*N )
+            birth_index = np.searchsorted(sample.cumulative_growth_rates, birth_rate)
+            if next_time < 2 * 1 / CST_VALUE:
+                division_times.append(next_time * N)
 
             death_index = np.random.randint(sample.n)
             sample.update(
@@ -422,24 +531,30 @@ def Moran_process(
                 fixation_probability,
             )
 
-            growth_rates.append(sample.total_growth_rate/N)
+            growth_rates.append(sample.total_growth_rate / N)
             timesteps.append(current_time)
-            absolute_generation.append(sample.sum_absolute_generation/N)
-            generation_since_last_evolution.append(sample.sum_generation_since_last_evolution/N)
-            mean_phenotype_generation.append(sample.sum_phenotype_generation/N)
+            absolute_generation.append(sample.sum_absolute_generation / N)
+            generation_since_last_evolution.append(
+                sample.sum_generation_since_last_evolution / N
+            )
+            mean_phenotype_generation.append(sample.sum_phenotype_generation / N)
             quantity_type.append(sample.quantity_per_type.copy())
-            #growth_rate_by_type.append(sample.growth_rate_per_type.copy())
-            mean_phenotype.append(sample.sum_evolution/N)
+            # growth_rate_by_type.append(sample.growth_rate_per_type.copy())
+            mean_phenotype.append(sample.sum_evolution / N)
 
             n_timesteps += 1
     analyzed_phenotype = []
     last_evolution_per_tree = [genetic_tree[-1] for genetic_tree in sample.genetic_tree]
-    for cell in sample.cells:  
-        if cell.phenotype is not None and cell.phenotype not in analyzed_phenotype and cell.phenotype not in last_evolution_per_tree:
+    for cell in sample.cells:
+        if (
+            cell.phenotype is not None
+            and cell.phenotype not in analyzed_phenotype
+            and cell.phenotype not in last_evolution_per_tree
+        ):
             analyzed_phenotype.append(cell.phenotype)
-            sample.genetic_tree.append(cell.previous_phenotype + [cell.phenotype])    
+            sample.genetic_tree.append(cell.previous_phenotype + [cell.phenotype])
 
-    transpose_quantity_type = [[] * sample.nb_types] 
+    transpose_quantity_type = [[] * sample.nb_types]
     """""
     for i in range(len(quantity_type)):
         for j in range(sample.nb_types):
@@ -447,7 +562,6 @@ def Moran_process(
                 break
             transpose_quantity_type[j].append(quantity_type[i][j])
     """
-
 
     return (
         timesteps,
@@ -459,7 +573,7 @@ def Moran_process(
         absolute_generation,
         generation_since_last_evolution,
         mean_phenotype_generation,
-        division_times
+        division_times,
     )
 
 
@@ -475,13 +589,10 @@ def main(
     cells = []
     initial_conditions = conditions_profile[0][0]
     for i in range(len(first_evolution)):
-            for j in range(numbers[i]):
-                cells.append(
-                    EvolutiveCells1D(type=i, conditions=initial_conditions)
-                )
-    
-    trigger_time = []
+        for j in range(numbers[i]):
+            cells.append(EvolutiveCells1D(type=i, conditions=initial_conditions))
 
+    trigger_time = []
 
     for k in range(n_iter):
         # Initialization, control the seed for reproducibility
@@ -491,28 +602,28 @@ def main(
         for i in range(len(first_evolution)):
             for j in range(numbers[i]):
                 cells.append(
-                    EvolutiveCells1D(i, conditions=initial_conditions, phenotype=first_evolution[i])
+                    EvolutiveCells1D(
+                        i, conditions=initial_conditions, phenotype=first_evolution[i]
+                    )
                 )
 
         sample = EvolutiveSample1D(
-            cells,
-            len(first_evolution),
-            conditions=initial_conditions
+            cells, len(first_evolution), conditions=initial_conditions
         )
-        
+
         start = time.time()
         if probabilities != None:
             (
                 timesteps,
-        quantity_type,
-        growth_rate_by_type,
-        mean_growth_rates,
-        mean_phenotype,
-        sample.list_evolutions,
-        absolute_generation,
-        generation_since_last_evolution,
-        mean_phenotype_generation,
-        division_times
+                quantity_type,
+                growth_rate_by_type,
+                mean_growth_rates,
+                mean_phenotype,
+                sample.list_evolutions,
+                absolute_generation,
+                generation_since_last_evolution,
+                mean_phenotype_generation,
+                division_times,
             ) = Moran_process(
                 sample,
                 conditions_profile,
@@ -523,51 +634,72 @@ def main(
         else:
             (
                 timesteps,
-        quantity_type,
-        growth_rate_by_type,
-        mean_growth_rates,
-        mean_phenotype,
-        sample.list_evolutions,
-        absolute_generation,
-        generation_since_last_evolution,
-        mean_phenotype_generation
+                quantity_type,
+                growth_rate_by_type,
+                mean_growth_rates,
+                mean_phenotype,
+                sample.list_evolutions,
+                absolute_generation,
+                generation_since_last_evolution,
+                mean_phenotype_generation,
             ) = Moran_process(sample, conditions_profile)
 
         print(f"Time elapsed: {time.time()-start} \n")
         start = time.time()
         # Find the top 10 evolutions based on the highest quantity reached for each evolution
         # because it is impossible to plot all the evolutions
-        top_10_evolutions = sample.find_top_evolutions( n_top=10)
+        top_10_evolutions = sample.find_top_evolutions(n_top=10)
         genetic_tree = sample.get_ascendance(top_10_evolutions)
 
-        top_100_evolutions = sample.find_top_evolutions( n_top=100)
+        top_100_evolutions = sample.find_top_evolutions(n_top=100)
         total_genetic_tree = sample.get_ascendance(top_100_evolutions)
 
-        # Smoothing data for better visualization     
-        smoothed_growth_rates = smooth_data(mean_growth_rates, timesteps, smooth_coefficient=smooth_coefficient)
-        smoothed_max_evolution = smooth_data(sample.max_evolution, timesteps, smooth_coefficient=smooth_coefficient)
-        smoothed_quantity_with_phenotypes = smooth_data(sample.quantity_with_phenotype, timesteps, smooth_coefficient=smooth_coefficient)
-        smoothed_mean_phenotype = smooth_data(mean_phenotype, timesteps, smooth_coefficient=smooth_coefficient)
-        smoothed_mean_generation_since_last_evolution = smooth_data(generation_since_last_evolution, timesteps, smooth_coefficient=smooth_coefficient)
-        
-        trigger_index = np.searchsorted(smoothed_mean_generation_since_last_evolution,  trigger)
-        trigger_time.append(timesteps[smooth_coefficient//2:-smooth_coefficient//2][trigger_index])
+        # Smoothing data for better visualization
+        smoothed_growth_rates = smooth_data(
+            mean_growth_rates, timesteps, smooth_coefficient=smooth_coefficient
+        )
+        smoothed_max_evolution = smooth_data(
+            sample.max_evolution, timesteps, smooth_coefficient=smooth_coefficient
+        )
+        smoothed_quantity_with_phenotypes = smooth_data(
+            sample.quantity_with_phenotype,
+            timesteps,
+            smooth_coefficient=smooth_coefficient,
+        )
+        smoothed_mean_phenotype = smooth_data(
+            mean_phenotype, timesteps, smooth_coefficient=smooth_coefficient
+        )
+        smoothed_mean_generation_since_last_evolution = smooth_data(
+            generation_since_last_evolution,
+            timesteps,
+            smooth_coefficient=smooth_coefficient,
+        )
 
+        trigger_index = np.searchsorted(
+            smoothed_mean_generation_since_last_evolution, trigger
+        )
+        trigger_time.append(
+            timesteps[smooth_coefficient // 2 : -smooth_coefficient // 2][trigger_index]
+        )
 
         print(f"Post process time: {time.time()-start} \n")
 
         # Plotting
-        
+
         plt.figure()
         for evolution in top_10_evolutions:
-            quantity_evolution =  []
+            quantity_evolution = []
             first_appearance = sample.evolution_count[evolution][0][1]
             last_appearance = sample.evolution_count[evolution][-1][1]
-            previous_change=first_appearance
+            previous_change = first_appearance
             for n, t_change in sample.evolution_count[evolution]:
-                quantity_evolution.extend([n]*(t_change-previous_change))
+                quantity_evolution.extend([n] * (t_change - previous_change))
                 previous_change = t_change
-            plt.plot(timesteps[first_appearance:last_appearance], quantity_evolution ,label=f"Evolution {evolution}")
+            plt.plot(
+                timesteps[first_appearance:last_appearance],
+                quantity_evolution,
+                label=f"Evolution {evolution}",
+            )
         plt.xlabel("Time")
         plt.ylabel("Proportion of cells")
         plt.title("Proportion of cells per evolution")
@@ -575,8 +707,12 @@ def main(
 
         plt.figure()
         plt.plot(timesteps, mean_growth_rates, label="Mean growth rate")
-        plt.plot(timesteps[smooth_coefficient//2:-smooth_coefficient//2], smoothed_growth_rates, label="Smoothed mean growth rate")
-        #plt.plot(timesteps[smooth_coefficient//2:-smooth_coefficient//2], phenotype_based_growth_rate, label="phenotype based growth rate")
+        plt.plot(
+            timesteps[smooth_coefficient // 2 : -smooth_coefficient // 2],
+            smoothed_growth_rates,
+            label="Smoothed mean growth rate",
+        )
+        # plt.plot(timesteps[smooth_coefficient//2:-smooth_coefficient//2], phenotype_based_growth_rate, label="phenotype based growth rate")
         plt.xlabel("Time")
         plt.ylabel("Mean growth rate")
         plt.title("Mean growth rate")
@@ -589,9 +725,23 @@ def main(
         plt.title("Mean absolute generation")
 
         plt.figure()
-        plt.plot(timesteps, generation_since_last_evolution, label="Mean generation since last evolution")
-        plt.plot(timesteps[smooth_coefficient//2:-smooth_coefficient//2], smoothed_mean_generation_since_last_evolution, label="Smoothed mean absolute generation")
-        plt.plot(timesteps[smooth_coefficient//2:-smooth_coefficient//2], [trigger]*len(timesteps[smooth_coefficient//2:-smooth_coefficient//2]), linestyle="--", color="red")
+        plt.plot(
+            timesteps,
+            generation_since_last_evolution,
+            label="Mean generation since last evolution",
+        )
+        plt.plot(
+            timesteps[smooth_coefficient // 2 : -smooth_coefficient // 2],
+            smoothed_mean_generation_since_last_evolution,
+            label="Smoothed mean absolute generation",
+        )
+        plt.plot(
+            timesteps[smooth_coefficient // 2 : -smooth_coefficient // 2],
+            [trigger]
+            * len(timesteps[smooth_coefficient // 2 : -smooth_coefficient // 2]),
+            linestyle="--",
+            color="red",
+        )
         plt.xlabel("Time")
         plt.ylabel("Mean generation since last evolution")
         plt.title("Mean generation since last evolution")
@@ -599,15 +749,25 @@ def main(
 
         plt.figure()
         plt.plot(timesteps, mean_phenotype, label="Mean phenotype")
-        plt.plot(timesteps[smooth_coefficient//2:-smooth_coefficient//2], smoothed_mean_phenotype, label="Smoothed mean phenotype")
+        plt.plot(
+            timesteps[smooth_coefficient // 2 : -smooth_coefficient // 2],
+            smoothed_mean_phenotype,
+            label="Smoothed mean phenotype",
+        )
         plt.xlabel("Time")
         plt.ylabel("Mean phenotype")
         plt.title("Mean phenotype")
         plt.legend()
 
         plt.figure()
-        plt.plot(timesteps, sample.quantity_with_phenotype, label="Proportion with phenotype")
-        plt.plot(timesteps[smooth_coefficient//2:-smooth_coefficient//2], smoothed_quantity_with_phenotypes, label="Smoothed quantity with phenotype")
+        plt.plot(
+            timesteps, sample.quantity_with_phenotype, label="Proportion with phenotype"
+        )
+        plt.plot(
+            timesteps[smooth_coefficient // 2 : -smooth_coefficient // 2],
+            smoothed_quantity_with_phenotypes,
+            label="Smoothed quantity with phenotype",
+        )
         plt.xlabel("Time")
         plt.ylabel("Proportion with phenotype")
         plt.title("Proportion with phenotype")
@@ -615,14 +775,20 @@ def main(
 
         plt.figure()
         plt.plot(timesteps, sample.max_evolution, label="Max evolution")
-        plt.plot(timesteps[smooth_coefficient//2:-smooth_coefficient//2], smoothed_max_evolution, label="Smoothed max evolution")
+        plt.plot(
+            timesteps[smooth_coefficient // 2 : -smooth_coefficient // 2],
+            smoothed_max_evolution,
+            label="Smoothed max evolution",
+        )
         plt.xlabel("Time")
         plt.ylabel("Max evolution")
         plt.title("Max evolution")
         plt.legend()
 
         plt.figure()
-        plt.plot(timesteps, mean_phenotype_generation, label="Mean phenotype generation")
+        plt.plot(
+            timesteps, mean_phenotype_generation, label="Mean phenotype generation"
+        )
         plt.xlabel("Time")
         plt.ylabel("Mean phenotype generation")
         plt.title("Mean phenotype generation")
@@ -635,7 +801,11 @@ def main(
 
         plt.figure()
         for i in range(len(genetic_tree)):
-            plt.plot(range(len(genetic_tree[i][1])),genetic_tree[i][1] , label=f"Evolution {genetic_tree[i][0]}")
+            plt.plot(
+                range(len(genetic_tree[i][1])),
+                genetic_tree[i][1],
+                label=f"Evolution {genetic_tree[i][0]}",
+            )
         plt.xlabel("Generation")
         plt.ylabel("Evolution")
         plt.title("phenotype tree")
@@ -643,7 +813,11 @@ def main(
 
         plt.figure()
         for i in range(len(total_genetic_tree)):
-            plt.plot(range(len(total_genetic_tree[i][1])),total_genetic_tree[i][1] , label=f"Evolution {total_genetic_tree[i][0]}")
+            plt.plot(
+                range(len(total_genetic_tree[i][1])),
+                total_genetic_tree[i][1],
+                label=f"Evolution {total_genetic_tree[i][0]}",
+            )
         plt.xlabel("Generation")
         plt.ylabel("Evolution")
         plt.title("Total phenotype tree")
@@ -654,35 +828,50 @@ def main(
         plt.ylabel("Frequency")
         plt.title("Division time distribution")
 
-   
-
         plt.show()
-        (       timesteps,
-                quantity_evolution,
-                growth_rate_by_type,
-                mean_growth_rates,
-                list_evolution,
-                absolute_generation,
-                generation_since_last_evolution,
-                mean_phenotype,
-                sample,
-                smoothed_growth_rates,
-                smoothed_max_evolution,
-                smoothed_quantity_with_phenotypes,
-                smoothed_mean_phenotype,
-                smoothed_mean_generation_since_last_evolution,
-                total_genetic_tree,
-                genetic_tree,
-                division_times
-            ) = None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None
+        (
+            timesteps,
+            quantity_evolution,
+            growth_rate_by_type,
+            mean_growth_rates,
+            list_evolution,
+            absolute_generation,
+            generation_since_last_evolution,
+            mean_phenotype,
+            sample,
+            smoothed_growth_rates,
+            smoothed_max_evolution,
+            smoothed_quantity_with_phenotypes,
+            smoothed_mean_phenotype,
+            smoothed_mean_generation_since_last_evolution,
+            total_genetic_tree,
+            genetic_tree,
+            division_times,
+        ) = (
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
 
     print(f"First increasing tendency: {trigger_time}")
     print(f"Mean first increasing tendency: {sum(trigger_time)/n_iter}")
     return timesteps
 
 
-
-#cProfile.run("main(first_evolution, numbers, conditions_profile, probabilities)", sort="tottime")
+# cProfile.run("main(first_evolution, numbers, conditions_profile, probabilities)", sort="tottime")
 
 main(first_evolution, numbers, conditions_profile, probabilities, n_iter=n_iter)
-
