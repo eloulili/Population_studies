@@ -3,7 +3,7 @@ import numpy as np
 import time
 import matplotlib.pyplot as plt
 
-DISTANT_COEFF = 250
+DISTANT_COEFF = 50
 
 np.random.seed(0)
 
@@ -260,14 +260,14 @@ for i in range(15):
 
 condition_profile = [(15, 1.15), (90, 1.3), (110, 1.2)]
 
-population = 6000
+population = 5000
 adaptation_probability = 0.1
 evolution_probability = 0.1
 evolution_without_adaptation_probability = 5e-4
 mean_time_to_loose_adaptation = 5
 probability_to_loose_adaptation = 1 / mean_time_to_loose_adaptation
 initial_evolutions = np.random.normal(0, 0.2, population)
-death_rate = 0.52
+death_rate = 0.21
 total_time = 300
 start = time.time()
 timesteps, populations, current_evolutions, rate_evolution, genetic_richness = (

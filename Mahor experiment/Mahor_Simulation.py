@@ -13,6 +13,7 @@ from scipy.stats import differential_entropy as entropy
 np.random.seed(0)
 
 # Define constants and simulation parameters.
+ONLY_DAUGHTER_EVOLVES = False
 N = 40000
 first_evolution = [[0, 0, 0, 0, 0, 0]]  # Initial evolution state
 adaptation_probability = 1  # Probability of adaptation
@@ -20,8 +21,6 @@ base_growth_rate = 0.5  # Base growth rate
 stds = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6]  # Standard deviations for the evolution
 n_iter = 1  # Number of iterations
 
-MULTIPLICATIVE = False
-SQUARE_ROOT = False
 PEAKS = None
 CHANGE_PEAK_PROBABILITY = 0.03
 
@@ -48,7 +47,6 @@ def compute_new_phenotype(
     new_phenotype = mother_cell.phenotype.copy()
     new_peak = mother_cell.associated_peak.copy()
     if np.random.uniform() < probability_to_adapt:
-        new_phenotype = mother_cell.phenotype.copy()
         new_phenotype = list(np.random.normal(mother_cell.phenotype, stds))
     if PEAKS is not None:
         if np.random.uniform() < CHANGE_PEAK_PROBABILITY:
@@ -104,7 +102,17 @@ class EvolutiveCell:
         new_cell.phenotype = new_phenotype
         new_cell.associated_peak = new_peak
         if new_phenotype != self.phenotype:
-            new_cell.previous_phenotype.append(new_phenotype)
+                new_cell.previous_phenotype.append(new_phenotype)
+        if not ONLY_DAUGHTER_EVOLVES:
+            new_phenotype, new_peak = compute_new_phenotype(
+                self, stds, probability_to_adapt
+            )
+            if new_phenotype != self.phenotype:
+                self.previous_phenotype.append(new_phenotype)
+
+            self.phenotype = new_phenotype
+            self.associated_peak = new_peak
+            
         return new_cell
 
 
@@ -143,20 +151,23 @@ class EvolutiveSample:
     ):
 
         # Update the sample by adding a new cell based on the birth index and adaptation probability.
+        if not ONLY_DAUGHTER_EVOLVES :
+            for i in range(len(stds)):
+                self.sum_evolution[i] -= self.cells[birth_index].phenotype[i]
+
         new_cell = self.cells[birth_index].reproduce(adaptation_probability, stds)
 
         evol_new_cell = new_cell.phenotype
 
-        self.genetic_tree.append(new_cell.previous_phenotype + [new_cell.phenotype])
-
         self.sum_absolute_generation += new_cell.absolute_generation
-
-        if self.nb_types > 1:
-            self.quantity_per_type[new_cell.type] += 1
-
-        for i in range(len(evol_new_cell)):
-            self.sum_evolution[i] += evol_new_cell[i]
+        if not ONLY_DAUGHTER_EVOLVES:
+            for i in range(len(evol_new_cell)):
+                self.sum_evolution[i] += evol_new_cell[i] + self.cells[birth_index].phenotype[i]
+        else:
+            for i in range(len(evol_new_cell)):
+                self.sum_evolution[i] += evol_new_cell[i]
         self.list_evolutions.append(evol_new_cell)
+   
         self.cells.append(new_cell)
         self.n += 1
 
@@ -179,7 +190,7 @@ def Gillespie_function(
     max_population_size: int = N,
 ):
     """
-    Simulate the Moran process with adaptation and loss of adaptation.
+    Simulate the growth of a population of cells using a Gillespie algorithm.
     To compute the next time step, the growth rate is drawn from a distribution chosen by the operator
     like in a gillespie algorithm.
     """
@@ -417,10 +428,10 @@ def main_lior(
     mean_per_simulation = []
     start = time.time()
 
-    cells = [EvolutiveCell(0, [0])]
+    cells = [EvolutiveCell(0, [10])]
     cells[0].associated_peak = [0]
 
-    otiginal_sample = EvolutiveSample(
+    original_sample = EvolutiveSample(
         cells,
         len(first_evolution),
     )
@@ -433,7 +444,7 @@ def main_lior(
         absolute_generation,
         divisions_time,
     ) = Gillespie_function(
-        otiginal_sample,
+        original_sample,
         adaptation_probability=adaptation_probability,
         base_growth_rate=base_growth_rate,
         stds=stds,
@@ -445,8 +456,9 @@ def main_lior(
     start = time.time()
     for i in range(int(dillution_1)):
         # We take a random cell from the first population and make it grow over n_2 generations
-        random_index = np.random.randint(otiginal_sample.n)
-        original_cell = otiginal_sample.cells[random_index]
+        random_index = np.random.randint(original_sample.n)
+        original_cell = original_sample.cells.pop(random_index)
+        original_sample.n -= 1
         new_sample = EvolutiveSample(cells=[original_cell], nb_types=1)
         (
             timesteps,
@@ -463,8 +475,7 @@ def main_lior(
         )
 
         evolutions = np.array(new_sample.list_evolutions).T
-        random_indexes = np.random.randint(new_sample.n, size=int(dillution_2))
-        list_evolutions.append(evolutions[0][random_indexes])
+        list_evolutions.append(evolutions[0][:])
         mean_per_simulation.append(np.mean(evolutions[0]))
         if i / dillution_1 > trigger and verbose:
             print(f"Progress: {trigger * 100} %, Time elapsed: {time.time() - start}")
@@ -478,10 +489,10 @@ def main_lior(
     total_variance = np.var(total_populations)
     total_entropy = entropy(total_populations)
     variance_inv = 1 / np.array(variance_deviation_per_simulation)
-    var_M = stds[0] ** 2 * adaptation_probability
+    var_M = (stds[0] ** 2 )* adaptation_probability
 
     end = time.time()
-
+    """"
     print(
         f"Mean Variance per simulation: {np.mean(variance_deviation_per_simulation, axis=0)}"
     )
@@ -489,12 +500,12 @@ def main_lior(
     print(f"Variance total population: {total_variance}\n")
     # print(f"Mean variance of deviation : {np.mean(variance_deviation_per_simulation, axis=0)}")
     # print(f" Expected ratio : { 1 + n_1/(n_2 - 1) * (1 + (np.mean(variance_deviation_per_simulation, axis=0) / mean_per_simulation)**2 ) }")
-
+    """
     CV_2 = (
         np.std(variance_deviation_per_simulation)
         / np.mean(variance_deviation_per_simulation)
     ) ** 2
-    expected_ratio = 1 + n_1 / (n_2 - 1) * (1 + CV_2)
+    expected_ratio = 1 + ((n_2-1) / (n_1) )* (1 + CV_2)
     expected_ratio_v2 = 1 + var_M * (n_2 - 1) * np.mean(
         variance_inv
     )  # There are 2 expressions for the expected ratio, this is the second one
@@ -502,7 +513,7 @@ def main_lior(
         variance_deviation_per_simulation, axis=0
     )
     std_ratio = np.sqrt(CV_2) * (n_2 - 1) / n_1
-
+    """""
     print(f" CV² :{CV_2}")
     print(f"Mean_expected_ratio : {expected_ratio }")
     print(f"Ecpected ratio v2 : {expected_ratio_v2 }")
@@ -520,11 +531,10 @@ def main_lior(
         # Plot the distribution of the population sometimes
         plt.hist(total_populations, bins=100)
         plt.show()
-
     print(
         f"Parameters: stds =  {stds}, adaptation_probability = {adaptation_probability}, growth_rate = {base_growth_rate}, n_1 = {n_1}, dillution_1 = {dillution_1}, n_2 = {n_2}, dillution_2 = {dillution_2} "
     )
-
+    """
     return (
         expected_ratio_v2 - 1.96 * std_ratio <= effective_ratio
         and effective_ratio <= expected_ratio_v2 + 1.96 * std_ratio,
@@ -542,60 +552,81 @@ def main_lior(
     )
 
 
-n_in_range = 0
-n_in_range_v2 = 0
-sum_ratio = 0
-sum_ratio_entropy = 0
-sum_cv = 0
-sum_total_variance = 0
-sum_total_entropy = 0
-sum_expected_ratio = 0
-sum_expected_ratio_v2 = 0
-for seed in range(100):
-    (
-        is_in_range_v2,
-        is_in_range,
-        effective_ratio,
-        expected_ratio,
-        expected_ratio_v2,
-        std,
-        total_variance,
-        cv_2,
-        total_entropy,
-        mean_entropy,
-        ratio_entropy,
-    ) = main_lior(
-        adaptation_probability=0.8,
-        base_growth_rate=base_growth_rate,
-        stds=[0.15],
-        n_1=17,
-        dillution_1=250,
-        n_2=8,
-        dillution_2=256,
-        seed=seed,
-        verbose=False,
-    )
-    print(seed)
-    sum_ratio += effective_ratio
-    sum_ratio_entropy += ratio_entropy
-    sum_cv += np.sqrt(cv_2)
-    sum_total_variance += total_variance
-    sum_total_entropy += total_entropy
-    sum_expected_ratio += expected_ratio
-    sum_expected_ratio_v2 += expected_ratio_v2
-    if is_in_range:
-        n_in_range += 1
+total_in_range = []
+total_in_range_v2 = []
+total_ratio = []
+total_expected_ratio = []
+total_expected_ratio_v2 = []
+N_SIM = 50
+for adaptation_probability in [0.001,0.005]:
+    n_in_range = 0
+    n_in_range_v2 = 0
+    sum_ratio = 0
+    sum_ratio_entropy = 0
+    sum_cv = 0
+    sum_total_variance = 0
+    sum_total_entropy = 0
+    sum_expected_ratio = 0
+    sum_expected_ratio_v2 = 0
+    sum_std_ratio = 0
+    for seed in range(N_SIM):
+        (
+            is_in_range_v2,
+            is_in_range,
+            effective_ratio,
+            expected_ratio,
+            expected_ratio_v2,
+            std,
+            total_variance,
+            cv_2,
+            total_entropy,
+            mean_entropy,
+            ratio_entropy,
+        ) = main_lior(
+            adaptation_probability=adaptation_probability,
+            base_growth_rate=base_growth_rate,
+            stds=[0.1],
+            n_1=18,
+            dillution_1=250,
+            n_2=10,
+            dillution_2=1014,
+            seed=seed,
+            verbose=False,
+        )
+        print(seed)
+        sum_ratio += effective_ratio
+        sum_cv += np.sqrt(cv_2)
+        sum_total_variance += total_variance
+        sum_expected_ratio += expected_ratio
+        sum_expected_ratio_v2 += expected_ratio_v2
+        sum_std_ratio += std
+        if is_in_range:
+            n_in_range += 1
 
-    if is_in_range_v2:
-        n_in_range_v2 += 1
-print(f"Number of simulations in range: {n_in_range}")
-print(f"Percentage of simulations in range: {100 * n_in_range/100}%")
-print(f"Number of simulations in range v2: {n_in_range_v2}")
-print(f"Percentage of simulations in range v2: {100 * n_in_range_v2/100} %")
-print(f"Mean effective ratio: {sum_ratio/100}")
-print(f"Mean expected ratio: {sum_expected_ratio/100}")
-print(f"Mean expected ratio v2: {sum_expected_ratio_v2/100}")
-print(f"Mean cv: {sum_cv/100}")
-print(f"Mean total variance: {sum_total_variance/100}\n")
-print(f"Mean total entropy: {sum_total_entropy/100}")
-print(f"Mean ratio entropy: {sum_ratio_entropy/100}")
+        if is_in_range_v2:
+            n_in_range_v2 += 1
+    total_in_range.append(n_in_range*2)
+    total_in_range_v2.append(n_in_range_v2*2)
+    total_ratio.append(sum_ratio/N_SIM)
+    total_expected_ratio.append(sum_expected_ratio/N_SIM)
+    total_expected_ratio_v2.append(sum_expected_ratio_v2/N_SIM)
+
+    print(f"Adaptation probability: {adaptation_probability}")
+    print(f"Number of simulations in range: {n_in_range}")
+    print(f"Percentage of simulations in range: {100 * n_in_range/N_SIM}%")
+    print(f"Number of simulations in range v2: {n_in_range_v2}")
+    print(f"Percentage of simulations in range v2: {100 * n_in_range_v2/N_SIM} %")
+    print(f"Mean effective ratio: {sum_ratio/N_SIM}")
+    print(f"Mean std ratio: {sum_std_ratio/N_SIM}")
+    print(f"Mean expected ratio: {sum_expected_ratio/N_SIM}")
+    print(f"Mean expected ratio v2: {sum_expected_ratio_v2/N_SIM}")
+    print(f"Mean cv: {sum_cv/N_SIM}")
+    print(f"CV(alpha): {sum_std_ratio/sum_ratio}")
+    print(f"Mean total variance: {sum_total_variance/N_SIM}\n")
+    
+print(total_expected_ratio)
+print(total_expected_ratio_v2)
+print(total_ratio)
+print(total_in_range)
+print(total_in_range_v2)
+

@@ -84,11 +84,13 @@ for i in range(len(all_times)):
 print(f"n_timesteps: {len(usable_all_times)}\n")
 
 # Plotting actual and predicted cell counts
+plt.figure()
 plt.plot(usable_all_times, usable_all_cells)
 plt.plot(usable_all_times, prediction, label="prediction")
 plt.legend()
-plt.title("Population ecolution")
+plt.title("Population evolution")
 
+plt.figure()
 for n_sim in range(1, 69):
     entropy_area_values = entropy_area_distribution[
         entropy_area_distribution["n_simulations"] == n_sim
@@ -138,10 +140,10 @@ for trait_name in ["area", "C1_mean", "mean_F_C2", "mean_F_C3"]:
         Sum_trait = 0
         current_sim = first_time_stamp["n_simulations"][0]
         n_initial_cells = []
-
+        n_cell_per_sim = 200
         # Compute the mean of the trait for the first time stamp
         for index, cell in first_time_stamp.iterrows():
-            if cell["n_simulations"] == current_sim:
+            if cell["n_simulations"] == current_sim :
                 n_cells += 1
                 Sum_trait += np.sqrt(cell[trait_name] / np.pi)
             else:
@@ -151,15 +153,8 @@ for trait_name in ["area", "C1_mean", "mean_F_C2", "mean_F_C3"]:
                 n_initial_cells.append(n_cells)
                 n_cells = 1
 
-        filtered_list = last_time_stamp[
-            last_time_stamp["n_simulations"] != 68
-        ]  # Remove the last time stamp which is problematic
-
-        End_trait = list(np.sqrt(filtered_list[trait_name] / np.pi))
-        Total_variance = np.var(End_trait)
-        Total_entropy = entropy(End_trait)
-        max_trait = np.max(End_trait)
-        min_trait = np.min(End_trait)
+        
+        
 
         Variance_per_simulation = []
         Entropy_per_simulation = []
@@ -170,17 +165,23 @@ for trait_name in ["area", "C1_mean", "mean_F_C2", "mean_F_C3"]:
         end_n_cells = []
         Ratios = []
         Ratios_entropy = []
-
+        n_cells = 1
+        End_trait = []
+        Sum_trait = 0
         for index, cell in last_time_stamp.iterrows():
-            if cell["n_simulations"] == current_sim:
+            if cell["n_simulations"] == current_sim and n_cells < n_cell_per_sim:
+                n_cells += 1
+                Sum_trait += np.sqrt(cell[trait_name] / np.pi)
                 Current_simulation_trait.append(np.sqrt(cell[trait_name] / np.pi))
+            elif cell["n_simulations"] == current_sim and n_cells >= n_cell_per_sim:
+                n_cells += 1
+                Sum_trait += np.sqrt(cell[trait_name] / np.pi)
             else:
                 Variance_per_simulation.append(np.var(Current_simulation_trait))
                 Entropy_per_simulation.append(entropy(Current_simulation_trait))
                 end_n_cells.append(len(Current_simulation_trait))
-                Mean_final_trait.append(np.mean(Current_simulation_trait))
-                Ratios.append(Total_variance / Variance_per_simulation[-1])
-                Ratios_entropy.append(Total_entropy / Entropy_per_simulation[-1])
+                Mean_final_trait.append(Sum_trait / n_cells)
+                End_trait.extend(Current_simulation_trait)
                 CV.append(
                     np.std(Current_simulation_trait) / np.mean(Current_simulation_trait)
                 )
@@ -190,6 +191,18 @@ for trait_name in ["area", "C1_mean", "mean_F_C2", "mean_F_C3"]:
                     plt.title(f"Histogram of {trait_name} : lineage {current_sim}")
                 Current_simulation_trait = [np.sqrt(cell[trait_name] / np.pi)]
                 current_sim = cell["n_simulations"]
+                n_cells = 1
+
+        Total_variance = np.var(End_trait)
+        Total_entropy = entropy(End_trait)
+        max_trait = np.max(End_trait)
+        min_trait = np.min(End_trait)
+        Computed_n1 = []
+        for sim in range( len(Variance_per_simulation)):
+            Ratios.append(Total_variance / Variance_per_simulation[sim])
+            Ratios_entropy.append(Total_entropy / Entropy_per_simulation[sim])
+            Computed_n1.append(get_n1(np.log2(end_n_cells[sim]), CV[sim], Ratios[sim]))
+
         mean_cv = np.mean(CV)
         Mean_variance = np.mean(Variance_per_simulation)
 
@@ -236,7 +249,7 @@ for trait_name in ["area", "C1_mean", "mean_F_C2", "mean_F_C3"]:
         plt.axvline(
             x=np.mean(Mean_initial_trait), color="b", linestyle="dashed", linewidth=2
         )
-        plt.title(f"Histogram of radius : all poopulation")
+        plt.title(f"Histogram of radius : all population")
 
         bins = np.histogram_bin_edges(Ratios, bins="sturges")
         plt.figure()
@@ -251,7 +264,7 @@ for trait_name in ["area", "C1_mean", "mean_F_C2", "mean_F_C3"]:
             linewidth=2,
             label="mean_expected_ratio",
         )
-        plt.title(f"Histogram of Ratios : {trait_name}")
+        plt.title(f"Histogram of Ratios : radius")
         plt.legend()
 
         print(f"Max_trait: {max_trait}")
@@ -285,9 +298,9 @@ for trait_name in ["area", "C1_mean", "mean_F_C2", "mean_F_C3"]:
     current_sim = first_time_stamp["n_simulations"][0]
     n_initial_cells = []
     for index, cell in first_time_stamp.iterrows():
-        if cell["n_simulations"] == current_sim:
-            n_cells += 1
-            Sum_trait += cell[trait_name]
+        if cell["n_simulations"] == current_sim :
+                n_cells += 1
+                Sum_trait += cell[trait_name] 
         else:
             Mean_initial_trait[int(current_sim)] = Sum_trait / n_cells
             current_sim = cell["n_simulations"]
@@ -297,12 +310,7 @@ for trait_name in ["area", "C1_mean", "mean_F_C2", "mean_F_C3"]:
             if current_sim == 68:
                 break
 
-    filtered_list = last_time_stamp[last_time_stamp["n_simulations"] != 68]
-    End_trait = list(filtered_list[trait_name])
-    Total_variance = np.var(End_trait)
-    Total_entropy = entropy(End_trait)
-    max_trait = np.max(End_trait)
-    min_trait = np.min(End_trait)
+    
 
     Variance_per_simulation = []
     Entropy_per_simulation = []
@@ -314,21 +322,25 @@ for trait_name in ["area", "C1_mean", "mean_F_C2", "mean_F_C3"]:
     Ratios = []
     Ratios_entropy = []
     Computed_n1 = []
+    End_trait = []
 
     for index, cell in last_time_stamp.iterrows():
-        if cell["n_simulations"] == current_sim:
-            Current_simulation_trait.append(cell[trait_name])
+        if cell["n_simulations"] == current_sim and n_cells < n_cell_per_sim:
+                n_cells += 1
+                Sum_trait += cell[trait_name] 
+                Current_simulation_trait.append(cell[trait_name] )
+        elif cell["n_simulations"] == current_sim and n_cells >= n_cell_per_sim:
+                n_cells += 1
+                Sum_trait += cell[trait_name]
         else:
             Variance_per_simulation.append(np.var(Current_simulation_trait))
             Entropy_per_simulation.append(entropy(Current_simulation_trait))
             end_n_cells.append(len(Current_simulation_trait))
-            Mean_final_trait.append(np.mean(Current_simulation_trait))
-            Ratios.append(Total_variance / Variance_per_simulation[-1])
-            Ratios_entropy.append(Total_entropy / Entropy_per_simulation[-1])
+            Mean_final_trait.append(Sum_trait / n_cells)
+            End_trait.extend(Current_simulation_trait)
             CV.append(
                 np.std(Current_simulation_trait) / np.mean(Current_simulation_trait)
             )
-            Computed_n1.append(get_n1(np.log2(end_n_cells[-1]), CV[-1], Ratios[-1]))
             if current_sim % 30 == 0 and False:
                 # To plot the distribution in one chamber
                 plt.figure()
@@ -336,6 +348,17 @@ for trait_name in ["area", "C1_mean", "mean_F_C2", "mean_F_C3"]:
                 plt.title(f"Histogram of {trait_name} : lineage {current_sim}")
             Current_simulation_trait = [cell[trait_name]]
             current_sim = cell["n_simulations"]
+            n_cells = 1
+
+    Total_variance = np.var(End_trait)
+    Total_entropy = entropy(End_trait)
+    max_trait = np.max(End_trait)
+    min_trait = np.min(End_trait)
+    for sim in range( len(Variance_per_simulation)):
+            Ratios.append(Total_variance / Variance_per_simulation[sim])
+            Ratios_entropy.append(Total_entropy / Entropy_per_simulation[sim])
+            Computed_n1.append(get_n1(np.log2(end_n_cells[sim]), CV[sim], Ratios[sim]))
+
 
     Mean_variance = np.mean(Variance_per_simulation)
     mean_cv = np.mean(CV)
@@ -384,7 +407,7 @@ for trait_name in ["area", "C1_mean", "mean_F_C2", "mean_F_C3"]:
     plt.axvline(
         x=np.mean(Mean_initial_trait), color="b", linestyle="dashed", linewidth=2
     )
-    plt.title(f"Histogram of {trait_name}: all poopulation")
+    plt.title(f"Histogram of {trait_name}: all population")
 
     bins = np.histogram_bin_edges(Ratios, bins="sturges")
     plt.figure()
@@ -417,7 +440,7 @@ for trait_name in ["area", "C1_mean", "mean_F_C2", "mean_F_C3"]:
 
     print(f"Sannon entropy: {shanon_entropy} \n")
 
-    print(f"Mean initial radius :" + f" {np.mean(Mean_initial_trait)}\n \n")
+    print(f"Mean initial {trait_name} :" + f" {np.mean(Mean_initial_trait)}\n \n")
     print("############################ \n \n \n")
 
 

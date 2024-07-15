@@ -3,10 +3,19 @@ import numpy as np
 import time
 import matplotlib.pyplot as plt
 
+
+"""
+Gillespie algorithm for the evolution of a population of cells
+with a constant death rate and a constant growth rate.
+An evolution is a range of values for which the cell is adapted.
+"""
+
+
 # Global Constants
-DISTANT_COEFF = 4.4
+DISTANT_COEFF = 4.8
 RANGE_COEFF = 2
 MAX_GROWTH_RATE = 1
+
 
 
 # Function to calculate the distance between a value and an interval
@@ -98,13 +107,14 @@ def gillespie_algorithm(
     probability_to_loose_adaptation=1 / 5,
     death_rate=0.5,
 ):
-
+    np.random.seed(42)
     populations = np.array([len(initial_evolutions)])
     n_evol, n_adapt, n_evol_wa = 0, 0, 0
     n_events, n_death, n_born = 0, 0, 0
     time = 0
     timesteps = [time]
 
+    np.random.seed(0)
     # Extracting the first condition and its time from the condition profile
     change_time, condition = condition_profile.pop(0)
 
@@ -280,7 +290,7 @@ def gillespie_algorithm(
             # Updating mean value after the event
             mean_value = (
                 mean_value * (populations[-1] - 1)
-                + (dead_cell.genotype[1] + dead_cell.genotype[0]) / 2
+                + (new_cell.genotype[1] + new_cell.genotype[0]) / 2
             ) / (populations[-1])
 
             # Updating data for new cell
@@ -362,21 +372,21 @@ condition_profile.extend([(450+ t/10, 0.3 +np.sin(2 * np.pi * t/(10*period_durat
 """
 period_duration = 1
 condition_profile = [(40, 0.8)]
-condition_profile.append((80, 0.3))
-condition_profile.append((120, 0.8))
+condition_profile.append((80, 0.28))
+condition_profile.append((120, 0.85))
 
 # Parameters
-population = 800
+population = 925
 adaptation_probability = 0.1
 evolution_probability = 0.1
 evolution_without_adaptation_probability = 5e-4
-mean_time_to_loose_adaptation = 5
+mean_time_to_loose_adaptation = 4
 probability_to_loose_adaptation = 1 / mean_time_to_loose_adaptation
 maxs = np.random.uniform(0.5, 1.2, population)
 mins = np.random.uniform(-0.2, 0.5, population)
 initial_evolutions = [(mins[i], maxs[i]) for i in range(population)]
-death_rate = 0.48
-total_time = 40
+death_rate = 0.47
+total_time = 250
 
 
 start = time.time()
@@ -400,7 +410,7 @@ start = time.time()
     evol_probability_without_adaptation=evolution_without_adaptation_probability,
     probability_to_loose_adaptation=probability_to_loose_adaptation,
     death_rate=death_rate,
-    n_plot=3,
+    n_plot=1,
 )
 stop = time.time()
 
