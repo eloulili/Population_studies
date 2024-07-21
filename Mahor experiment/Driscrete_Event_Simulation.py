@@ -5,12 +5,15 @@ import matplotlib.pyplot as plt
 import time
 import cProfile
 
+"""
+Simulation based on the Discrete Event Simulation method.
+"""
 
 # Set the seed for NumPy's random number generator to ensure reproducibility.
-np.random.seed(0)
+random.seed(0)
 
 # Define constants and simulation parameters.
-ONLY_DAUGHTER_EVOLVES = False # If False, the mother may also evolve
+ONLY_DAUGHTER_EVOLVES = True # If False, the mother may also evolve
 
 adaptation_probability = 1  # Probability of adaptation
 base_growth_rate = 0.5  # Base growth rate
@@ -20,6 +23,7 @@ std_time = 0.1  # Standard deviation for the time between divisions
 
 
 def next_interval(rate, variance, type):
+    # Choose the wanted distribution of division time based on the growth rate
     if type == "lognormal":
         mu = np.log(1 /(rate  * np.sqrt(1 + variance * rate**2)))
         sigma = np.sqrt(np.log(1 + variance * rate**2))
@@ -68,6 +72,7 @@ class EvolutiveCell:
         new_cell.phenotype = new_phenotype
 
         if not ONLY_DAUGHTER_EVOLVES:
+            # Deal with the case for which the "mother" cell is also considered as a daughter and may evolve
             new_phenotype = compute_new_phenotype(
                 self, std, probability_to_adapt
             )
@@ -79,22 +84,25 @@ class EvolutiveCell:
 
 class System(object):
     
-    def __init__(self, initial_cell, adaptation_probability = 0.1, max_population = 2**18):
+    def __init__(self, initial_cell, adaptation_probability = 0.1, max_population = 2**18): 
         self.schedule = []
         self.cells = [initial_cell]
         self.division_times = []
         self.n_cells = 1
-        self.n_next_divisions = 0
+        self.n_next_divisions = 0 # number of divisions in the schedule
         self.adaptation_probability = adaptation_probability
-        self.max_time_schedule = 0.
+        self.max_time_schedule = 0. # Time of the mast event in the schedule
         self.max_population = max_population
 
 
 class Event(object):
-    
+    # For another simulation keep the structure consistent
     def __init__(self, time):
         self.time = time
         self.type = ""
+
+    def action(self, system):
+        pass
     
 
     
@@ -115,12 +123,25 @@ class Division(Event):
 
         next_division_time_mother = next_interval(self.cell.growth_rate, std_time, "normal") + self.time
         if system.n_cells + system.n_next_divisions < system.max_population +2 or next_division_time_mother < system.max_time_schedule:
+            """
+            In order to keep the schedule not too long, we add conditions to add another divisions:
+            - The number of cells plus the number of predicted divisions does not exceed the targeted number of cells
+            or
+            - The time of the next division of the cell happens before the last event in the schedule
+
+            The number of event in the schedule should then be lower than 2^(n-1) instead of growing until 2^n
+            """
+            #TODO: if you want to use this method for a simulation in which there are not only divisions, maybe this won't be adapted
+         
             division_event_mother = Division(next_division_time_mother, self.cell)
             heapq.heappush(system.schedule, (next_division_time_mother , division_event_mother))
             system.n_next_divisions += 1
             if next_division_time_mother > system.max_time_schedule:
+                # Update the value of the last event in the schedule
                 system.max_time_schedule = next_division_time_mother
             if system.n_cells + system.n_next_divisions  >= system.max_population +2:
+                # If the predicted population exceeds the maximum population, and that we are allowed to add a division
+                # it means that it happens before the last division and then, we can remove it and update the last event
                 heapq.heappop(system.schedule)
                 system.max_timeschedule = system.schedule[-1][0]
                 system.n_next_divisions -= 1
@@ -141,6 +162,8 @@ class Division(Event):
 
 
 def main(n_1: int, n_2 : int, dillution : int, adaptation_probability: float):
+
+    # First step of the experiment
     initial_cell = EvolutiveCell(phenotype= 10)
     system = System(initial_cell, adaptation_probability, max_population = 2**n_1)
     next_division_time = next_interval(initial_cell.growth_rate, std_time, "normal")
@@ -153,6 +176,7 @@ def main(n_1: int, n_2 : int, dillution : int, adaptation_probability: float):
         event.action(system)
 
 
+    # Second step
     chosen_cells = random.sample(system.cells, dillution)
     evolutions = []
     for cell in chosen_cells:
@@ -167,6 +191,7 @@ def main(n_1: int, n_2 : int, dillution : int, adaptation_probability: float):
         phenotypes = [cell.phenotype for cell in system.cells]
         evolutions.append(phenotypes)
     
+    # Analysis
     variances_per_simulation = []
     evolution_total_population = []
     for evolution in evolutions:
@@ -174,7 +199,7 @@ def main(n_1: int, n_2 : int, dillution : int, adaptation_probability: float):
         evolution_total_population.extend(evolution)
     
     if np.random.uniform() < 0.05:
-        plt.hist(evolution_total_population, bins=1000)
+        plt.hist(evolution_total_population, bins=70)
         plt.show()
     variance_total_population = np.var(evolution_total_population)
     variance_inv = 1 / np.array(variances_per_simulation)
@@ -211,7 +236,7 @@ total_ratio = []
 total_expected_ratio = []
 total_expected_ratio_v2 = []
 N_SIM = 50
-for adaptation_probability in [0.001, 0.005, 0.01, 0.05]:
+for adaptation_probability in [0.1,0.3, 0.5]:
     n_in_range = 0
     n_in_range_v2 = 0
     sum_ratio = 0
@@ -222,6 +247,7 @@ for adaptation_probability in [0.001, 0.005, 0.01, 0.05]:
     sum_std_ratio = 0
     start = time.time()
     for seed in range(N_SIM):
+        np.random.seed(seed)
         (
             is_in_range_v2,
             is_in_range,
@@ -272,3 +298,4 @@ print(total_expected_ratio_v2)
 print(total_ratio)
 print(total_in_range)
 print(total_in_range_v2)
+
