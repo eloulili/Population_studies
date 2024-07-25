@@ -21,6 +21,14 @@ std = 0.1  # Standard deviations for the evolution
 std_time = 0.1  # Standard deviation for the time between divisions
 
 
+def remove_max(heap):
+    negativ_heap = [(-x[0], x[1]) for x in heap]
+    heapq.heapify(negativ_heap)
+    heapq.heappop(negativ_heap)
+    return [(-x[0], x[1]) for x in negativ_heap]
+
+
+
 
 def next_interval(rate, variance, type):
     # Choose the wanted distribution of division time based on the growth rate
@@ -122,41 +130,13 @@ class Division(Event):
         system.n_next_divisions -= 1
 
         next_division_time_mother = next_interval(self.cell.growth_rate, std_time, "normal") + self.time
-        if system.n_cells + system.n_next_divisions < system.max_population +2 or next_division_time_mother < system.max_time_schedule:
-            """
-            In order to keep the schedule not too long, we add conditions to add another divisions:
-            - The number of cells plus the number of predicted divisions does not exceed the targeted number of cells
-            or
-            - The time of the next division of the cell happens before the last event in the schedule
-
-            The number of event in the schedule should then be lower than 2^(n-1) instead of growing until 2^n
-            """
-            #TODO: if you want to use this method for a simulation in which there are not only divisions, maybe this won't be adapted
          
-            division_event_mother = Division(next_division_time_mother, self.cell)
-            heapq.heappush(system.schedule, (next_division_time_mother , division_event_mother))
-            system.n_next_divisions += 1
-            if next_division_time_mother > system.max_time_schedule:
-                # Update the value of the last event in the schedule
-                system.max_time_schedule = next_division_time_mother
-            if system.n_cells + system.n_next_divisions  >= system.max_population +2:
-                # If the predicted population exceeds the maximum population, and that we are allowed to add a division
-                # it means that it happens before the last division and then, we can remove it and update the last event
-                heapq.heappop(system.schedule)
-                system.max_timeschedule = system.schedule[-1][0]
-                system.n_next_divisions -= 1
+        division_event_mother = Division(next_division_time_mother, self.cell)
+        heapq.heappush(system.schedule, (next_division_time_mother , division_event_mother))
 
         next_division_time_daughter = next_interval(new_cell.growth_rate, std_time, "normal") + self.time
-        if system.n_cells + system.n_next_divisions <system.max_population +2 or next_division_time_daughter < system.max_time_schedule:
-            division_event_mother = Division(next_division_time_daughter, new_cell)
-            heapq.heappush(system.schedule, (next_division_time_daughter , division_event_mother))
-            system.n_next_divisions += 1
-            if next_division_time_daughter > system.max_time_schedule:
-                system.max_time_schedule = next_division_time_daughter
-            if system.n_cells + system.n_next_divisions >= system.max_population +2 :
-                heapq.heappop(system.schedule)
-                system.max_timeschedule = system.schedule[-1][0]
-                system.n_next_divisions -= 1
+        division_event_mother = Division(next_division_time_daughter, new_cell)
+        heapq.heappush(system.schedule, (next_division_time_daughter , division_event_mother))
 
 
 
@@ -230,13 +210,14 @@ def main(n_1: int, n_2 : int, dillution : int, adaptation_probability: float):
     )
 
 
+
 total_in_range = []
 total_in_range_v2 = []
 total_ratio = []
 total_expected_ratio = []
 total_expected_ratio_v2 = []
 N_SIM = 50
-for adaptation_probability in [0.1,0.3, 0.5]:
+for adaptation_probability in [0.001,0.005, 0.01,0.05]:
     n_in_range = 0
     n_in_range_v2 = 0
     sum_ratio = 0
