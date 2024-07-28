@@ -217,7 +217,7 @@ total_ratio = []
 total_expected_ratio = []
 total_expected_ratio_v2 = []
 N_SIM = 50
-for adaptation_probability in [0.001,0.005, 0.01,0.05]:
+for adaptation_probability in [0.001,0.005,0.008, 0.01,0.03, 0.05, 0.008,0.1]:
     n_in_range = 0
     n_in_range_v2 = 0
     sum_ratio = 0
